@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "core": "cpp",
+        "splines": "cpp"
+    },
+    "editor.formatOnSave": true,
+    "clang-format.executable": "/usr/bin/clang-format-15"
+}
