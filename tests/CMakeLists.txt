@@ -8,3 +8,7 @@ CPMAddPackage(
 
 include(CTest)
 enable_testing()
+
+target_link_libraries(tests PRIVATE Catch2::Catch2WithMain)
+
+
