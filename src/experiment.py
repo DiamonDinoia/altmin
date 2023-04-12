@@ -140,6 +140,11 @@ if __name__ == "__main__":
     mu = args.mu
     mu_max = 10 * args.mu
 
+    print("---")
+    print(model)
+    print("---")
+    model.a()
+
     for epoch in range(1, args.epochs+1):
         print('\nEpoch {} of {}. mu = {:.4f}, lr_out = {}'.format(
             epoch, args.epochs, mu, model[-1].scheduler.get_lr()))
