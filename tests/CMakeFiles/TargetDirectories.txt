@@ -1,5 +1,0 @@
-/home/tom/Documents/Thesis/c++/tests/CMakeFiles/test_ex.dir
-/home/tom/Documents/Thesis/c++/tests/CMakeFiles/edit_cache.dir
-/home/tom/Documents/Thesis/c++/tests/CMakeFiles/rebuild_cache.dir
-/home/tom/Documents/Thesis/c++/tests/_deps/catch2-build/CMakeFiles/edit_cache.dir
-/home/tom/Documents/Thesis/c++/tests/_deps/catch2-build/CMakeFiles/rebuild_cache.dir
