@@ -1,10 +1,13 @@
-from altmin import scheduler_step, post_processing_step
-from altmin import get_mods, get_codes, update_codes, update_last_layer_, update_hidden_weights_adam_
-import torch.optim as optim
-import torch.nn as nn
-import torch
-import argparse
 import os
+import argparse
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+from altmin import get_mods, get_codes, update_codes, update_last_layer_, update_hidden_weights_adam_
+from altmin import scheduler_step, post_processing_step
+from altmin import test
+from altmin import get_devices, ddict, load_dataset
 
 
 # Training settings
@@ -79,7 +82,7 @@ print('* Loading model {}'.format(model_name))
 print('     BatchNorm: {}'.format(not args.no_batchnorm))
 
 if args.model.lower() == 'feedforward' or args.model.lower() == 'binary':
-    from models import FFNet
+    from altmin import FFNet
 
     train_loader, test_loader, n_inputs = load_dataset(
         args.dataset, batch_size=args.batch_size, conv_net=False)
@@ -88,7 +91,7 @@ if args.model.lower() == 'feedforward' or args.model.lower() == 'binary':
                   batchnorm=not args.no_batchnorm, bias=False).to(device)
 
 elif args.model.lower() == 'lenet':
-    from models import LeNet
+    from altmin import LeNet
 
     train_loader, test_loader, n_inputs = load_dataset(args.dataset, batch_size=args.batch_size, conv_net=True,
                                                        data_augmentation=args.data_augmentation)
