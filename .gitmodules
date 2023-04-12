@@ -1,0 +1,3 @@
+[submodule "src/src/altmin"]
+	path = src/src/altmin
+	url = https://github.com/DiamonDinoia/online-alt-min.git
