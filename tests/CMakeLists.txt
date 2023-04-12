@@ -9,7 +9,9 @@ CPMAddPackage(
 include(CTest)
 enable_testing()
 
-add_executable(tests tests.cpp)
-target_link_libraries(tests PRIVATE Catch2::Catch2WithMain)
+#add_executable(hi test_hello.cpp)
+#target_link_libraries(tests PRIVATE Catch2::Catch2WithMain)
 
+
+#install(TARGETS hi DESTINATION ${CMAKE_SOURCE_DIR}/tests)
 
