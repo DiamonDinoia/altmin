@@ -142,6 +142,7 @@ if __name__ == "__main__":
 
     print("---")
     print(model)
+    print(model[1].weight)
     print("---")
     model.a()
 
