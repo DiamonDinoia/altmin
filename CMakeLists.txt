@@ -14,13 +14,12 @@ if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
 project(atlmin LANGUAGES CXX)
-cmake_minimum_required(VERSION 3.18...3.22)
+cmake_minimum_required(VERSION 3.18...3.26)
 find_package(Python 3.7 COMPONENTS Interpreter Development.Module REQUIRED)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(DCMAKE_RULE_MESSAGES OFF)
-# set(CMAKE_POLICY_DEFAULT_CMP0097 NEW)
 
 
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -69,14 +68,21 @@ endif ()
 include(${CPM_DOWNLOAD_LOCATION})
 
 CPMAddPackage(
-        NAME eigen
+        NAME Eigen
         GIT_REPOSITORY https://gitlab.com/libeigen/eigen
         GIT_TAG ${EIGEN_DOWNLOAD_VERSION}
         GIT_SHALLOW YES
         GIT_PROGRESS YES
         EXCLUDE_FROM_ALL YES
         SYSTEM YES
+        DOWNLOAD_ONLY YES 
+
 )
+
+if(Eigen_ADDED)
+  add_library(Eigen INTERFACE IMPORTED)
+  target_include_directories(Eigen INTERFACE ${Eigen_SOURCE_DIR})
+endif()
 
 CPMAddPackage(
         NAME nanobind
@@ -88,10 +94,8 @@ CPMAddPackage(
         SYSTEM YES
 )
 
-# add_subdirectory(${nanobind_SOURCE_DIR} ${nanobind_BINARY_DIR} EXCLUDE_FROM_ALL)
-
 add_executable(eigen_example src/eigen.cpp)
-target_link_libraries(eigen_example PRIVATE Eigen3::Eigen)
+target_link_libraries(eigen_example PRIVATE Eigen)
 
 nanobind_add_module(nanobind_hello_world src/nanobind_hello_world.cpp)
 
@@ -100,19 +104,19 @@ nanobind_add_module(nanobind_hello_world_in src/nanobind_hello_world_in.cpp)
 nanobind_add_module(nanobind_hello_world_out src/nanobind_hello_world_out.cpp)
 
 nanobind_add_module(nanobind_matrix_multiplication src/nanobind_matrix_multiplication.cpp)
-target_link_libraries(nanobind_matrix_multiplication PRIVATE Eigen3::Eigen)
+target_link_libraries(nanobind_matrix_multiplication PRIVATE Eigen)
 
 nanobind_add_module(nanobind_return_matrix src/nanobind_return_matrix.cpp)
-target_link_libraries(nanobind_return_matrix PRIVATE Eigen3::Eigen)
+target_link_libraries(nanobind_return_matrix PRIVATE Eigen)
 
 nanobind_add_module(nanobind_matrix_in src/nanobind_matrix_in.cpp)
-target_link_libraries(nanobind_matrix_in PRIVATE Eigen3::Eigen)
+target_link_libraries(nanobind_matrix_in PRIVATE Eigen)
 
 nanobind_add_module(nanobind_lin src/nanobind_lin.cpp)
-target_link_libraries(nanobind_lin PRIVATE Eigen3::Eigen)
+target_link_libraries(nanobind_lin PRIVATE Eigen)
 
 nanobind_add_module(nanobind_relu src/nanobind_relu.cpp)
-target_link_libraries(nanobind_relu PRIVATE Eigen3::Eigen)
+target_link_libraries(nanobind_relu PRIVATE Eigen)
 
 install(TARGETS eigen_example DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_hello_world DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
@@ -123,9 +127,6 @@ install(TARGETS nanobind_return_matrix DESTINATION ${CMAKE_SOURCE_DIR}/artifacts
 install(TARGETS nanobind_matrix_in DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_lin DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_relu DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-
-install(FILES src/nanobind_hello_world.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(FILES tests/tests.py DESTINATION ${CMAKE_SOURCE_DIR}/tests )
 
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)
