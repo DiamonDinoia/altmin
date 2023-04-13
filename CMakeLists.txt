@@ -125,7 +125,7 @@ install(TARGETS nanobind_lin DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_relu DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
 install(FILES src/nanobind_hello_world.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(FILES tests/tests.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
+install(FILES tests/tests.py DESTINATION ${CMAKE_SOURCE_DIR}/tests )
 
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)
