@@ -7,6 +7,7 @@ import nanobind_return_matrix
 import nanobind_matrix_in
 
 import nanobind_lin
+import nanobind_relu
 
 import torch
 import numpy as np
@@ -54,6 +55,18 @@ class TestLin(unittest.TestCase):
                                    weight, bias)
 
         python_imp = lin(in_tensor).detach().numpy().astype(np.float64)
+
+        assert(np.allclose(python_imp, cpp_imp, rtol=1e-04, atol=1e-07))
+
+
+class TestReLU(unittest.TestCase):
+
+    def test_ReLU(self):
+        relu = nn.ReLU()
+        in_tensor = torch.rand(5, 10)
+
+        cpp_imp = nanobind_relu.ReLU(in_tensor.numpy())
+        python_imp = relu(in_tensor)
 
         assert(np.allclose(python_imp, cpp_imp, rtol=1e-04, atol=1e-07))
 

@@ -111,6 +111,9 @@ target_link_libraries(nanobind_matrix_in PRIVATE Eigen3::Eigen)
 nanobind_add_module(nanobind_lin src/nanobind_lin.cpp)
 target_link_libraries(nanobind_lin PRIVATE Eigen3::Eigen)
 
+nanobind_add_module(nanobind_relu src/nanobind_relu.cpp)
+target_link_libraries(nanobind_relu PRIVATE Eigen3::Eigen)
+
 install(TARGETS eigen_example DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_hello_world DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_hello_world_in DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
@@ -119,6 +122,7 @@ install(TARGETS nanobind_matrix_multiplication DESTINATION ${CMAKE_SOURCE_DIR}/a
 install(TARGETS nanobind_return_matrix DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_matrix_in DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_lin DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+install(TARGETS nanobind_relu DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
 install(FILES src/nanobind_hello_world.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(FILES tests/tests.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
