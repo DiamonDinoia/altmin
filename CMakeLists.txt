@@ -118,6 +118,16 @@ target_link_libraries(nanobind_lin PRIVATE Eigen)
 nanobind_add_module(nanobind_relu src/nanobind_relu.cpp)
 target_link_libraries(nanobind_relu PRIVATE Eigen)
 
+nanobind_add_module(nanobind_sigmoid src/nanobind_sigmoid.cpp)
+target_link_libraries(nanobind_sigmoid PRIVATE Eigen)
+
+nanobind_add_module(nanobind_pass_dict src/nanobind_pass_dict.cpp)
+target_link_libraries(nanobind_pass_dict PRIVATE Eigen)
+
+nanobind_add_module(nanobind_get_codes src/nanobind_get_codes.cpp)
+target_link_libraries(nanobind_get_codes PRIVATE Eigen)
+
+
 install(TARGETS eigen_example DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_hello_world DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_hello_world_in DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
@@ -127,6 +137,9 @@ install(TARGETS nanobind_return_matrix DESTINATION ${CMAKE_SOURCE_DIR}/artifacts
 install(TARGETS nanobind_matrix_in DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_lin DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_relu DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+install(TARGETS nanobind_sigmoid DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+install(TARGETS nanobind_pass_dict DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+install(TARGETS nanobind_get_codes DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)
