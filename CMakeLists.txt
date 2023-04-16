@@ -127,14 +127,8 @@ target_link_libraries(eigen_example PRIVATE Eigen)
 
 nanobind_add_module(nanobind_hello_world src/nanobind_hello_world.cpp)
 
-nanobind_add_module(nanobind_matrix_multiplication src/nanobind_matrix_multiplication.cpp)
-target_link_libraries(nanobind_matrix_multiplication PRIVATE Eigen)
-
-nanobind_add_module(nanobind_return_matrix src/nanobind_return_matrix.cpp)
-target_link_libraries(nanobind_return_matrix PRIVATE Eigen)
-
-nanobind_add_module(nanobind_matrix_in src/nanobind_matrix_in.cpp)
-target_link_libraries(nanobind_matrix_in PRIVATE Eigen)
+nanobind_add_module(nanobind_matrix_funcs src/nanobind_matrix_funcs.cpp)
+target_link_libraries(nanobind_matrix_funcs PRIVATE Eigen)
 
 nanobind_add_module(nanobind_pass_dict src/nanobind_pass_dict.cpp)
 target_link_libraries(nanobind_pass_dict PRIVATE Eigen)
@@ -148,9 +142,7 @@ target_link_libraries(nanobind_layers PRIVATE Eigen)
 
 install(TARGETS eigen_example DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_hello_world DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_matrix_multiplication DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_return_matrix DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_matrix_in DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+install(TARGETS nanobind_matrix_funcs DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_pass_dict DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_layers DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 

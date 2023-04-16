@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 import nanobind_get_codes
-import nanobind_matrix_multiplication
+import nanobind_matrix_funcs
 import nanobind_hello_world
 import nanobind_pass_dict
 import nanobind_layers
@@ -23,7 +23,7 @@ class TestMatrixMultiplication(unittest.TestCase):
     def test_matrix_multiplication_in_cpp(self):
         a = np.asarray([[3, 2], [-1, 4]])
         b = np.asarray([[1, 0], [1, 1]])
-        c = nanobind_matrix_multiplication.matrix_multiplication(a, b)
+        c = nanobind_matrix_funcs.matrix_multiplication(a, b)
         assert((c == np.asarray([[5, 2], [3, 4]])).all())
 
 
@@ -115,9 +115,6 @@ class TestGetCodes(unittest.TestCase):
                cpp_out, rtol=1e-04, atol=1e-07))
 
 
-'''
-
-
 class TestPassDict(unittest.TestCase):
 
     def test_both(self):
@@ -163,7 +160,7 @@ class TestPassDict(unittest.TestCase):
         tmp = list(tmp.values())
 
         nanobind_pass_dict.pass_both(tmp)
-'''
+
 
 if __name__ == '__main__':
     unittest.main()
