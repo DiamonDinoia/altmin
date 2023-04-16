@@ -84,15 +84,31 @@ class TestGetCodes(unittest.TestCase):
 
         # Ignore Flatten for now
         model = model[1:]
-        id_codes = np.array([i for i, m in enumerate(model) if hasattr(
+        num_codes = len([i for i, m in enumerate(model) if hasattr(
             m, 'has_codes') and getattr(m, 'has_codes')])
-        str_array = [str(mod) for mod in model[:-1]]
+
+        layer_map = []
+        for mod in model[:-1]:
+            if isinstance(mod, nn.Linear):
+                layer_map.append(0)
+            elif isinstance(mod, nn.ReLU):
+                layer_map.append(1)
+            elif isinstance(mod, nn.Sigmoid):
+                layer_map.append(2)
+            else:
+                print("layer not imp yet")
 
         for mod in model[-1]:
-            str_array.append(str(mod))
+            if isinstance(mod, nn.Linear):
+                layer_map.append(0)
+            elif isinstance(mod, nn.ReLU):
+                layer_map.append(1)
+            elif isinstance(mod, nn.Sigmoid):
+                layer_map.append(2)
+            else:
+                print("layer not imp yet")
 
-        str_array = np.asarray(str_array)
-        print(str_array)
+        layer_map = np.asarray(layer_map)
 
         python_out, python_codes = get_codes(model, in_tensor)
 
@@ -104,15 +120,14 @@ class TestGetCodes(unittest.TestCase):
         tmp = list(tmp.values())
 
         cpp_out, cpp_codes = nanobind_get_codes.get_codes(
-            str_array, id_codes, in_tensor.numpy(), tmp)
+            layer_map, num_codes, in_tensor.numpy(), tmp)
 
-        # print(nanobind_lin.lin(in_tensor.numpy().astype(np.float64),
-        # tmp["1.weight"], tmp["1.bias"]))
-
-        # print(python_out.detach().numpy())
-        # print(cpp_out)
         assert(np.allclose(python_out.detach().numpy(),
                cpp_out, rtol=1e-04, atol=1e-07))
+
+        for x in range(len(cpp_codes)):
+            assert(np.allclose(python_codes[x].detach().numpy(),
+                               cpp_codes[x], rtol=1e-04, atol=1e-07))
 
 
 class TestPassDict(unittest.TestCase):
@@ -125,17 +140,7 @@ class TestPassDict(unittest.TestCase):
 
         tmp = [a, b, c, d]
 
-        # tmp = np.asarray([a, b, c], dtype=object)
-        # print(a)
-        # print(np.asarray(a))
-
-        # print(b)
-
-        # nanobind_pass_dict.pass_weights(weights)
-        # nanobind_pass_dict.pass_biases(biases)
-
         nanobind_pass_dict.pass_both(tmp)
-        # nanobind_pass_dict.pass_biases(biases)
 
     def test_model(self):
         model = simpleNN(2, [4, 3], 1)
