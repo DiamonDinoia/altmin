@@ -5,8 +5,6 @@
 
 namespace nb = nanobind;
 
-using namespace nb::literals;
-
 int hello_world() {
     std::cout << "c++: Hello World";
     return 0;

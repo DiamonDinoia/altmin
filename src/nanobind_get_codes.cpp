@@ -11,35 +11,9 @@
 #include <tuple>
 #include <vector>
 
+#include "nanobind_layers.hpp"
+
 namespace nb = nanobind;
-
-Eigen::MatrixXf lin(const nb::DRef<Eigen::MatrixXf> &input,
-                    const nb::DRef<Eigen::MatrixXf> &weight,
-                    const nb::DRef<Eigen::MatrixXf> &bias) {
-    Eigen::MatrixXf result =
-        (input * weight.transpose()).rowwise() + bias.row(0);
-    if (result.rows() == 1) { result = ((input * weight.transpose()) + bias); }
-    return result;
-}
-
-Eigen::MatrixXf ReLU(const nb::DRef<Eigen::MatrixXf> &input) {
-    return input.unaryExpr(
-        [](float x) { return std::max(x, static_cast<float>(0.0)); });
-}
-
-Eigen::MatrixXf sigmoid(const nb::DRef<Eigen::MatrixXf> &input) {
-    return input.unaryExpr([](float x) {
-        return static_cast<float>(1.0) / (static_cast<float>(1.0) + exp(-x));
-    });
-}
-
-// https://stackoverflow.com/questions/68877737/how-to-get-shape-dimensions-of-an-eigen-matrix
-template <typename Derived>
-std::string get_shape(const Eigen::EigenBase<Derived> &x) {
-    std::ostringstream oss;
-    oss << "(" << x.rows() << ", " << x.cols() << ")";
-    return oss.str();
-}
 
 // Currently hardcode size of in array
 std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> get_codes(
