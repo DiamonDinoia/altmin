@@ -127,10 +127,6 @@ target_link_libraries(eigen_example PRIVATE Eigen)
 
 nanobind_add_module(nanobind_hello_world src/nanobind_hello_world.cpp)
 
-nanobind_add_module(nanobind_hello_world_in src/nanobind_hello_world_in.cpp)
-
-nanobind_add_module(nanobind_hello_world_out src/nanobind_hello_world_out.cpp)
-
 nanobind_add_module(nanobind_matrix_multiplication src/nanobind_matrix_multiplication.cpp)
 target_link_libraries(nanobind_matrix_multiplication PRIVATE Eigen)
 
@@ -152,8 +148,6 @@ target_link_libraries(nanobind_layers PRIVATE Eigen)
 
 install(TARGETS eigen_example DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_hello_world DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_hello_world_in DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_hello_world_out DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_matrix_multiplication DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_return_matrix DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_matrix_in DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)

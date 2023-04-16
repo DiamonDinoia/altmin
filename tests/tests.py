@@ -3,14 +3,7 @@ import numpy as np
 import torch
 
 import nanobind_get_codes
-import nanobind_relu
-import nanobind_lin
-import nanobind_sigmoid
-import nanobind_matrix_in
-import nanobind_return_matrix
 import nanobind_matrix_multiplication
-import nanobind_hello_world_out
-import nanobind_hello_world_in
 import nanobind_hello_world
 import nanobind_pass_dict
 import nanobind_layers
@@ -22,7 +15,7 @@ from models import simpleNN
 
 class TestHelloWorldOut(unittest.TestCase):
     def test_output_from_cpp(self):
-        res = nanobind_hello_world_out.hello_world_out()
+        res = nanobind_hello_world.hello_world_out()
         assert(res == "Hi python from c++")
 
 
