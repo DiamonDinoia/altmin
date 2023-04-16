@@ -13,6 +13,7 @@ import nanobind_hello_world_out
 import nanobind_hello_world_in
 import nanobind_hello_world
 import nanobind_pass_dict
+import nanobind_layers
 import unittest
 
 from altmin import get_mods, get_codes
@@ -33,7 +34,7 @@ class TestMatrixMultiplication(unittest.TestCase):
         assert((c == np.asarray([[5, 2], [3, 4]])).all())
 
 
-class TestLin(unittest.TestCase):
+class TestLayers(unittest.TestCase):
 
     def test_lin(self):
         lin = nn.Linear(10, 30)
@@ -42,8 +43,8 @@ class TestLin(unittest.TestCase):
         bias = lin.bias.data.numpy().astype(
             np.float64).reshape(1, lin.out_features)
 
-        cpp_imp = nanobind_lin.lin(in_tensor.numpy().astype(np.float64),
-                                   weight, bias)
+        cpp_imp = nanobind_layers.lin(in_tensor.numpy().astype(np.float64),
+                                      weight, bias)
 
         python_imp = lin(in_tensor).detach().numpy().astype(np.float64)
 
@@ -56,61 +57,27 @@ class TestLin(unittest.TestCase):
         bias = lin.bias.data.numpy().astype(
             np.float64).reshape(1, lin.out_features)
 
-        cpp_imp = nanobind_lin.lin(in_tensor.numpy().astype(np.float64),
-                                   weight, bias)
+        cpp_imp = nanobind_layers.lin(in_tensor.numpy().astype(np.float64),
+                                      weight, bias)
 
         python_imp = lin(in_tensor).detach().numpy().astype(np.float64)
 
         assert(np.allclose(python_imp, cpp_imp, rtol=1e-04, atol=1e-07))
 
-    '''
-    def test_lin_problem(self):
-        model = simpleNN(10, [20, 4], 1)
-        model = get_mods(model)
-        in_tensor = torch.rand(5, 10)
-
-        # Ignore Flatten for now
-        model = model[1:]
-        tmp = dict(model.state_dict())
-
-        for keys in tmp:
-            if 'bias' in keys:
-                tmp[keys] = tmp[keys].numpy().reshape(1, len(tmp[keys]))
-            else:
-                tmp[keys] = tmp[keys].numpy()
-
-        # print(len(str_array))
-        # print(str_array)
-
-        print(tmp["1.bias"])
-        print("\n")
-        print(tmp["1.weight"])
-        print("\n\n")
-
-        nanobind_lin.lin(in_tensor.numpy().astype(np.float64),
-                         tmp["1.weight"], tmp["1.bias"])
-    '''
-
-
-class TestReLU(unittest.TestCase):
-
     def test_ReLU(self):
         relu = nn.ReLU()
         in_tensor = torch.rand(5, 10)
 
-        cpp_imp = nanobind_relu.ReLU(in_tensor.numpy())
+        cpp_imp = nanobind_layers.ReLU(in_tensor)
         python_imp = relu(in_tensor)
 
         assert(np.allclose(python_imp, cpp_imp, rtol=1e-04, atol=1e-07))
-
-
-class TestSigmoid(unittest.TestCase):
 
     def test_sigmoid(self):
         sigmoid = nn.Sigmoid()
         in_tensor = torch.rand(5, 10)
 
-        cpp_imp = nanobind_sigmoid.sigmoid(in_tensor.numpy())
+        cpp_imp = nanobind_layers.sigmoid(in_tensor)
         python_imp = sigmoid(in_tensor)
 
         assert(np.allclose(python_imp, cpp_imp, rtol=1e-04, atol=1e-07))
@@ -156,6 +123,8 @@ class TestGetCodes(unittest.TestCase):
 
 
 '''
+
+
 class TestPassDict(unittest.TestCase):
 
     def test_both(self):
