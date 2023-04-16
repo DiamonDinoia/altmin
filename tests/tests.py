@@ -209,10 +209,10 @@ class TestPassDict(unittest.TestCase):
                 weights.append(tmp[keys].numpy())
 
         # print(tmp)
-        print(weights)
-        print("\n")
-        print(biases)
-        print("\n\n")
+        # print(weights)
+        # print("\n")
+        # print(biases)
+        # print("\n\n")
 
         cpp_out, cpp_codes = nanobind_get_codes.get_codes(
             str_array, id_codes, in_tensor.numpy(), weights[:-1], biases, weights[-1].flatten())
