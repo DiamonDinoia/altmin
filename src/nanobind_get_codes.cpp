@@ -13,21 +13,24 @@
 
 namespace nb = nanobind;
 
-Eigen::MatrixXd lin(const nb::DRef<Eigen::MatrixXd> &input,
-                    const nb::DRef<Eigen::MatrixXd> &weight,
-                    const nb::DRef<Eigen::MatrixXd> &bias) {
-    Eigen::MatrixXd result =
+Eigen::MatrixXf lin(const nb::DRef<Eigen::MatrixXf> &input,
+                    const nb::DRef<Eigen::MatrixXf> &weight,
+                    const nb::DRef<Eigen::MatrixXf> &bias) {
+    Eigen::MatrixXf result =
         (input * weight.transpose()).rowwise() + bias.row(0);
     if (result.rows() == 1) { result = ((input * weight.transpose()) + bias); }
     return result;
 }
 
-Eigen::MatrixXd ReLU(const nb::DRef<Eigen::MatrixXd> &input) {
-    return input.unaryExpr([](double x) { return std::max(x, 0.0); });
+Eigen::MatrixXf ReLU(const nb::DRef<Eigen::MatrixXf> &input) {
+    return input.unaryExpr(
+        [](float x) { return std::max(x, static_cast<float>(0.0)); });
 }
 
-Eigen::MatrixXd sigmoid(const nb::DRef<Eigen::MatrixXd> &input) {
-    return input.unaryExpr([](double x) { return 1.0 / (1.0 + exp(-x)); });
+Eigen::MatrixXf sigmoid(const nb::DRef<Eigen::MatrixXf> &input) {
+    return input.unaryExpr([](float x) {
+        return static_cast<float>(1.0) / (static_cast<float>(1.0) + exp(-x));
+    });
 }
 
 // https://stackoverflow.com/questions/68877737/how-to-get-shape-dimensions-of-an-eigen-matrix
@@ -39,15 +42,14 @@ std::string get_shape(const Eigen::EigenBase<Derived> &x) {
 }
 
 // Currently hardcode size of in array
-std::tuple<Eigen::MatrixXd, Eigen::MatrixXd> get_codes(
-    const std::array<std::string, 7> &model_mods,
-    const nb::ndarray<int> &id_codes, const nb::DRef<Eigen::MatrixXd> &inputs,
-    std::vector<Eigen::MatrixXd> &weights, std::vector<Eigen::VectorXd> &biases,
-    Eigen::VectorXd &last_weights) {
+std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> get_codes(
+    const std::vector<std::string> &model_mods,
+    const nb::ndarray<int> &id_codes, const nb::DRef<Eigen::MatrixXf> &inputs,
+    std::vector<nb::DRef<Eigen::MatrixXf>> tmp) {
     // std::cout << "hi";
     // for (auto const &i : model_mods) { std::cout << i << "\n"; }
 
-    Eigen::MatrixXd result = inputs;
+    Eigen::MatrixXf result = inputs;
 
     /*std::cout << weights[0] << "\n\n";
     std::cout << weights[1] << "\n\n";
@@ -59,30 +61,32 @@ std::tuple<Eigen::MatrixXd, Eigen::MatrixXd> get_codes(
     std::cout << biases[1] << "\n\n";
     std::cout << biases[2] << "\n\n";*/
 
-    int x = 0;
-    int y = 0;
+    int                        x   = 0;
+    int                        y   = 0;
+    nb::DRef<Eigen::MatrixXf> *p_w = tmp.data();
+
+    std::cout << "Input: " << inputs << "\n\n";
+
+    /*for (size_t i = 0; i < tmp.size(); ++i) {
+        std::cout << "\n" << *(p_w + i) << "\n";
+    }*/
+
     for (auto const &i : model_mods) {
         // std::cout << get_shape(result);
         // std::cout << " " << std::to_string(x) << " " << std::to_string(y)
         //<< "\n";
-        std::cout << result << "\n"
-                  << "\n";
-        std::cout << i << "\n";
-        std::cout << x << "hi \n";
-        if (i.find("Sequential") != std::string::npos) {
-            y = x;
-        } else if (i.find("Linear") != std::string::npos) {
-            if (y > 0) {
-                result = lin(result, last_weights, biases[x]);
-            } else {
-                result = lin(result, weights[x], biases[x]);
-            }
+
+        if (i.find("Linear") != std::string::npos) {
+            result = lin(result, *(p_w + x), *(p_w + x + 1));
+            x += 2;
         } else if (i.find("ReLU") != std::string::npos) {
             result = ReLU(result);
         } else if (i.find("Sigmoid") != std::string::npos) {
             result = sigmoid(result);
         }
-        x += 1;
+
+        std::cout << i << "\n";
+        std::cout << "Result: " << result << "\n\n";
     }
 
     return {result, result};

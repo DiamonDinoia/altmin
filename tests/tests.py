@@ -35,7 +35,6 @@ class TestMatrixMultiplication(unittest.TestCase):
 
 class TestLin(unittest.TestCase):
 
-    '''
     def test_lin(self):
         lin = nn.Linear(10, 30)
         in_tensor = torch.rand(1, 10)
@@ -64,7 +63,7 @@ class TestLin(unittest.TestCase):
 
         assert(np.allclose(python_imp, cpp_imp, rtol=1e-04, atol=1e-07))
 
-
+    '''
     def test_lin_problem(self):
         model = simpleNN(10, [20, 4], 1)
         model = get_mods(model)
@@ -117,42 +116,38 @@ class TestSigmoid(unittest.TestCase):
         assert(np.allclose(python_imp, cpp_imp, rtol=1e-04, atol=1e-07))
 
 
-'''
 class TestGetCodes(unittest.TestCase):
     def test_get_codes(self):
-        model = simpleNN(2, [5, 2], 1)
+        model = simpleNN(2, [4, 3], 1)
         model = get_mods(model)
-        in_tensor = torch.rand(2, 10)
+        in_tensor = torch.rand(5, 2)
 
         # Ignore Flatten for now
         model = model[1:]
         id_codes = np.array([i for i, m in enumerate(model) if hasattr(
             m, 'has_codes') and getattr(m, 'has_codes')])
-        str_array = np.array([str(mod) for mod in model])
+        str_array = [str(mod) for mod in model[:-1]]
 
-        # print(str_array)
         for mod in model[-1]:
-            str_array = np.append(str_array, str(mod))
+            str_array.append(str(mod))
+
+        str_array = np.asarray(str_array)
+        print(str_array)
+
+        python_out, python_codes = get_codes(model, in_tensor)
 
         tmp = model.state_dict()
+        for key in tmp.keys():
+            if 'bias' in key:
+                tmp[key] = torch.reshape(tmp[key], (1, len(tmp[key])))
 
-        weights = []
-        biases = []
-        for keys in tmp:
-            if 'bias' in keys:
-                biases.append(tmp[keys].numpy().flatten())
-            else:
-                weights.append(tmp[keys].numpy())
+        tmp = list(tmp.values())
 
-        print(tmp)
-        print(weights)
-        print(biases)
         cpp_out, cpp_codes = nanobind_get_codes.get_codes(
-            str_array, id_codes, in_tensor.numpy(), weights, biases)
+            str_array, id_codes, in_tensor.numpy(), tmp)
 
         # print(nanobind_lin.lin(in_tensor.numpy().astype(np.float64),
         # tmp["1.weight"], tmp["1.bias"]))
-        python_out, python_codes = get_codes(model, in_tensor)
 
         # print(python_out.detach().numpy())
         # print(cpp_out)
@@ -161,27 +156,27 @@ class TestGetCodes(unittest.TestCase):
 
 
 '''
-
-
 class TestPassDict(unittest.TestCase):
-    '''
 
-   def test_pass_dict(self):
-        a = torch.rand(5, 2).numpy()
-        b = torch.rand(1, 5).numpy().flatten()
-        c = torch.rand(2, 5).numpy()
-        d = torch.rand(1, 5).numpy().flatten()
+    def test_both(self):
+        a = torch.rand(5, 2)
+        b = torch.rand(1, 5)
+        c = torch.rand(5, 5)
+        d = torch.rand(1, 2)
 
-        weights = [a, c]
-        biases = [b, d]
+        tmp = [a, b, c, d]
 
+        # tmp = np.asarray([a, b, c], dtype=object)
         # print(a)
-        # print(c)
+        # print(np.asarray(a))
 
         # print(b)
-        # print(d)
-        nanobind_pass_dict.pass_dict(weights, biases)
-    '''
+
+        # nanobind_pass_dict.pass_weights(weights)
+        # nanobind_pass_dict.pass_biases(biases)
+
+        nanobind_pass_dict.pass_both(tmp)
+        # nanobind_pass_dict.pass_biases(biases)
 
     def test_model(self):
         model = simpleNN(2, [4, 3], 1)
@@ -199,31 +194,14 @@ class TestPassDict(unittest.TestCase):
             str_array = np.append(str_array, str(mod))
 
         tmp = model.state_dict()
+        for key in tmp.keys():
+            if 'bias' in key:
+                tmp[key] = torch.reshape(tmp[key], (1, len(tmp[key])))
 
-        weights = []
-        biases = []
-        for keys in tmp:
-            if 'bias' in keys:
-                biases.append(tmp[keys].numpy().flatten())
-            else:
-                weights.append(tmp[keys].numpy())
+        tmp = list(tmp.values())
 
-        # print(tmp)
-        # print(weights)
-        # print("\n")
-        # print(biases)
-        # print("\n\n")
-
-        cpp_out, cpp_codes = nanobind_get_codes.get_codes(
-            str_array, id_codes, in_tensor.numpy(), weights[:-1], biases, weights[-1].flatten())
-
-        python_out, python_codes = get_codes(model, in_tensor)
-
-        # print(python_out.detach().numpy())
-        # print(cpp_out)
-        assert(np.allclose(python_out.detach().numpy(),
-               cpp_out, rtol=1e-04, atol=1e-07))
-
+        nanobind_pass_dict.pass_both(tmp)
+'''
 
 if __name__ == '__main__':
     unittest.main()

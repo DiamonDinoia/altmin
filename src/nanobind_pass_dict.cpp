@@ -23,16 +23,34 @@ std::string get_shape(const Eigen::EigenBase<Derived> &x) {
 
 // Currently hardcode size of in array
 // Have to split into two to get working
-int pass_dict(std::vector<Eigen::MatrixXd> &weights,
-              std::vector<Eigen::VectorXd> &biases) {
-    std::cout << weights[0] << "\n";
-    // std::cout << weights[1] << "\n";
-    std::cout << biases[0] << get_shape(biases[0]) << "\n";
-    // std::cout << biases[1] << get_shape(biases[1]) << "\n";
+int pass_weights(std::vector<nb::DRef<Eigen::MatrixXf>> weights) {
+    nb::DRef<Eigen::MatrixXf> *p_w = weights.data();
+
+    std::cout << "\n" << *(p_w + 0) << "\n";
+    std::cout << "\n" << *(p_w + 1) << "\n";
+
+    return 0;
+}
+
+int pass_biases(std::vector<nb::DRef<Eigen::MatrixXf>> biases) {
+    nb::DRef<Eigen::MatrixXf> *p_b = biases.data();
+    std::cout << "\n" << *(p_b + 0) << "\n";
+    std::cout << "\n" << *(p_b + 1) << "\n";
+    return 0;
+}
+
+int pass_both(std::vector<nb::DRef<Eigen::MatrixXf>> tmp) {
+    nb::DRef<Eigen::MatrixXf> *p_w = tmp.data();
+    for (size_t i = 0; i < tmp.size(); ++i) {
+        std::cout << "\n" << *(p_w + i) << "\n";
+    }
+
     return 0;
 }
 
 NB_MODULE(nanobind_pass_dict, m) {
-    m.def("pass_dict", &pass_dict);
+    m.def("pass_weights", &pass_weights);
+    m.def("pass_biases", &pass_biases);
+    m.def("pass_both", &pass_both);
     m.doc() = "python dict to map in cpp";
 }
