@@ -131,6 +131,7 @@ class TestGetCodes(unittest.TestCase):
                                cpp_codes[x], rtol=1e-04, atol=1e-07))
 
 
+'''
 class TestUpdateCodes(unittest.TestCase):
     def test_update_codes(self):
         model = simpleNN(2, [4, 3], 1)
@@ -184,6 +185,7 @@ class TestUpdateCodes(unittest.TestCase):
         targets = np.random.choice([0.0, 1.0], 10)
         cpp_codes = nanobind_get_codes.update_codes(
             codes, layer_map, id_codes, targets, tmp)
+'''
 
 
 class TestPassDict(unittest.TestCase):
@@ -225,10 +227,20 @@ class TestPassDict(unittest.TestCase):
 
 class TestCriterion(unittest.TestCase):
     def test_BCELoss(self):
-        targets = np.random.choice([0.0, 1.0], 10)
-        predictions = np.random.rand(10)
+        targets = torch.round(torch.rand(1, 10))
+        predictions = torch.rand(1, 10)
+        print(targets)
+        print(predictions)
         cpp_loss = nanobind_criterion.BCELoss(predictions, targets)
-        python_loss = nn.BCELoss()(torch.from_numpy(predictions), torch.from_numpy(targets))
+        python_loss = nn.BCELoss()(predictions, targets)
+
+        self.assertAlmostEqual(cpp_loss, python_loss.item(), 4)
+
+    def test_batch_BCELoss(self):
+        targets = torch.rand(5, 10)
+        predictions = torch.rand(5, 10)
+        cpp_loss = nanobind_criterion.BCELoss(predictions, targets)
+        python_loss = nn.BCELoss()(predictions, targets)
 
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 4)
 

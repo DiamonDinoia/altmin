@@ -47,6 +47,18 @@ float MSELoss(const std::vector<float> &predictions,
     return sum;
 }
 
+float BCELoss(const std::vector<float> &predictions,
+              const std::vector<float> &targets) {
+    int   N   = predictions.size();
+    float sum = static_cast<float>(0.0);
+    for (size_t i = 0; i < N; ++i) {
+        sum += (targets[i] * log(predictions[i])) +
+               ((1 - targets[i]) * log(1 - predictions[i]));
+    }
+    sum *= (-1 / static_cast<float>(N));
+    return sum;
+}
+
 // https://stackoverflow.com/questions/68877737/how-to-get-shape-dimensions-of-an-eigen-matrix
 template <typename Derived>
 std::string get_shape(const Eigen::EigenBase<Derived> &x) {
@@ -105,6 +117,9 @@ int update_codes(std::vector<nb::DRef<Eigen::MatrixXf>> codes,
     for (int i = id_codes.size() - 1; i >= 0; --i) {
         Eigen::MatrixXf output;
         size_t          idx = id_codes[i];
+        // Think atm this will change when the other changes so need to fix
+        // thast
+        Eigen::MatrixXf codes_initial = *(p_c + i);
         if (std::find(id_codes.begin(), id_codes.end(), idx + 1) !=
             id_codes.end()) {
             int y = model_mods[idx + 1];
@@ -160,24 +175,28 @@ int update_codes(std::vector<nb::DRef<Eigen::MatrixXf>> codes,
             }
         }
 
-        // worry about loss function later
         /*
-        if (i == id_codes.size() - 1) {
-            // def loss_fn(x): return criterion(x, targets)
-        } else {
-            // def loss_fn(x): return mu*F.mse_loss(x, codes[i-1])
-        }
+        for (size_t num_iter = 0; num_iter < 1; ++num_iter) {
+            // optimizer.zero_grad()
+            // loss = compute_codes_loss(
+            //    codes[-l], nmod, lin, loss_fn, codes_initial, mu, lambda_c)
 
-        for (size_t num_iter = 0; num_iter < 5; ++num_iter) {
-            /* optimizer.zero_grad()
-            loss = compute_codes_loss(
-                codes[-l], nmod, lin, loss_fn, codes_initial, mu, lambda_c)
+            float loss;
+            // float loss = 1/mu;
+            // REMEMBER to add 1/mu bacj at sine oiubt
+            if (i == id_codes.size() - 1) {
+                loss = BCELoss(output, targets)
+            } else {
+                loss = MSELoss(codes, *(p_c + i + 1))
+            }
 
-            //loss = (1/mu)*loss_fn(output) + F.mse_loss(codes, codes_targets)
-            //if lambda_c > 0.0:
-            //loss += (lambda_c/mu)*codes.abs().mean()
-            loss.backward()
-            optimizer.step()
+            loss += MSELoss(*(p_c + i), codes_inital)
+                    // codes_targets) if lambda_c > 0.0: loss +=
+                    // (lambda_c/mu)*codes.abs().mean()
+                    // loss.backward()
+                    // optimizer.step()
+                    std::cout
+                    << loss << "\n";
         }*/
         std::cout << output;
         break;
