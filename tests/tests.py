@@ -7,6 +7,7 @@ import nanobind_matrix_funcs
 import nanobind_hello_world
 import nanobind_pass_dict
 import nanobind_layers
+import nanobind_criterion
 import unittest
 
 from altmin import get_mods, get_codes
@@ -165,6 +166,16 @@ class TestPassDict(unittest.TestCase):
         tmp = list(tmp.values())
 
         nanobind_pass_dict.pass_both(tmp)
+
+
+class TestCriterion(unittest.TestCase):
+    def test_BCELoss(self):
+        targets = np.random.choice([0.0, 1.0], 10)
+        predictions = np.random.rand(10)
+        cpp_loss = nanobind_criterion.BCELoss(predictions, targets)
+        python_loss = nn.BCELoss()(torch.from_numpy(predictions), torch.from_numpy(targets))
+
+        self.assertAlmostEqual(cpp_loss, python_loss.item(), 4)
 
 
 if __name__ == '__main__':

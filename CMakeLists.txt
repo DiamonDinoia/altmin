@@ -136,9 +136,11 @@ target_link_libraries(nanobind_pass_dict PRIVATE Eigen)
 nanobind_add_module(nanobind_get_codes src/nanobind_get_codes.cpp)
 target_link_libraries(nanobind_get_codes PRIVATE Eigen)
 
-
 nanobind_add_module(nanobind_layers src/nanobind_layers.cpp)
 target_link_libraries(nanobind_layers PRIVATE Eigen)
+
+nanobind_add_module(nanobind_criterion src/nanobind_criterion.cpp)
+target_link_libraries(nanobind_criterion PRIVATE Eigen)
 
 
 install(TARGETS eigen_example DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
@@ -147,6 +149,7 @@ install(TARGETS nanobind_matrix_funcs DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_pass_dict DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_layers DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_get_codes DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+install(TARGETS nanobind_criterion DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)
