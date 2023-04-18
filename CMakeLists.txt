@@ -122,6 +122,8 @@ CPMAddPackage(
         SYSTEM YES
 )
 
+
+
 add_executable(eigen_example src/eigen.cpp)
 target_link_libraries(eigen_example PRIVATE Eigen)
 
@@ -133,13 +135,16 @@ target_link_libraries(nanobind_matrix_funcs PRIVATE Eigen)
 nanobind_add_module(nanobind_pass_dict src/nanobind_pass_dict.cpp)
 target_link_libraries(nanobind_pass_dict PRIVATE Eigen)
 
-nanobind_add_module(nanobind_get_codes src/nanobind_get_codes.cpp)
-target_link_libraries(nanobind_get_codes PRIVATE Eigen)
-
-nanobind_add_module(nanobind_layers src/nanobind_layers.cpp)
+nanobind_add_module(nanobind_layers include/nanobind_layers.hpp src/nanobind_layers.cpp)
+target_include_directories(nanobind_layers PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(nanobind_layers PRIVATE Eigen)
 
-nanobind_add_module(nanobind_criterion src/nanobind_criterion.cpp)
+nanobind_add_module(nanobind_get_codes include/nanobind_layers.hpp src/nanobind_get_codes.cpp)
+target_include_directories(nanobind_get_codes PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(nanobind_get_codes PRIVATE Eigen)
+
+nanobind_add_module(nanobind_criterion include/nanobind_criterion.hpp src/nanobind_criterion.cpp)
+target_include_directories(nanobind_criterion PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(nanobind_criterion PRIVATE Eigen)
 
 

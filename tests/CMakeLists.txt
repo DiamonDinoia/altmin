@@ -33,6 +33,7 @@ CPMAddPackage(
 install(DIRECTORY ${altmin_SOURCE_DIR}/ DESTINATION ${CMAKE_SOURCE_DIR}/artifacts/altmin)
 install(FILES ${CMAKE_SOURCE_DIR}/src/nanobind_hello_world.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(FILES ${CMAKE_SOURCE_DIR}/src/models.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+install(FILES ${CMAKE_SOURCE_DIR}/src/control_flow.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(FILES ${CMAKE_SOURCE_DIR}/tests/tests.py DESTINATION ${CMAKE_SOURCE_DIR}/tests )
 
 

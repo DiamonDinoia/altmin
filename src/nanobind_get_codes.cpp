@@ -16,26 +16,7 @@
 
 namespace nb = nanobind;
 
-Eigen::MatrixXf lin(const nb::DRef<Eigen::MatrixXf> &input,
-                    const nb::DRef<Eigen::MatrixXf> &weight,
-                    const nb::DRef<Eigen::MatrixXf> &bias) {
-    Eigen::MatrixXf result =
-        (input * weight.transpose()).rowwise() + bias.row(0);
-    if (result.rows() == 1) { result = ((input * weight.transpose()) + bias); }
-    return result;
-}
-
-Eigen::MatrixXf ReLU(const nb::DRef<Eigen::MatrixXf> &input) {
-    return input.unaryExpr(
-        [](float x) { return std::max(x, static_cast<float>(0.0)); });
-}
-
-Eigen::MatrixXf sigmoid(const nb::DRef<Eigen::MatrixXf> &input) {
-    return input.unaryExpr([](float x) {
-        return static_cast<float>(1.0) / (static_cast<float>(1.0) + exp(-x));
-    });
-}
-
+/*
 float MSELoss(const std::vector<float> &predictions,
               const std::vector<float> &targets) {
     int   N   = predictions.size();
@@ -52,12 +33,12 @@ float BCELoss(const std::vector<float> &predictions,
     int   N   = predictions.size();
     float sum = static_cast<float>(0.0);
     for (size_t i = 0; i < N; ++i) {
-        sum += (targets[i] * log(predictions[i])) +
-               ((1 - targets[i]) * log(1 - predictions[i]));
+        sum += (targets[i] * std::log(predictions[i])) +
+               ((1 - targets[i]) * std::log(1 - predictions[i]));
     }
     sum *= (-1 / static_cast<float>(N));
     return sum;
-}
+}*/
 
 // https://stackoverflow.com/questions/68877737/how-to-get-shape-dimensions-of-an-eigen-matrix
 template <typename Derived>
@@ -75,7 +56,8 @@ std::tuple<Eigen::MatrixXf, std::vector<Eigen::MatrixXf>> get_codes(
     const std::vector<int> &model_mods, const int num_codes,
     const nb::DRef<Eigen::MatrixXf>       &inputs,
     std::vector<nb::DRef<Eigen::MatrixXf>> model_dict) {
-    Eigen::MatrixXf              result = inputs;
+    Eigen::MatrixXf result = inputs;
+    /*
     std::vector<Eigen::MatrixXf> codes;
     int                          codes_index = 0;
     int                          x           = 0;
@@ -98,7 +80,9 @@ std::tuple<Eigen::MatrixXf, std::vector<Eigen::MatrixXf>> get_codes(
             break;
         }
     }
-
+    */
+    std::vector<Eigen::MatrixXf> codes;
+    codes.push_back(result);
     return {result, codes};
 }
 
@@ -108,102 +92,104 @@ int update_codes(std::vector<nb::DRef<Eigen::MatrixXf>> codes,
                  const std::vector<int>                &id_codes,
                  const std::vector<float>              &targets,
                  std::vector<nb::DRef<Eigen::MatrixXf>> model_dict) {
-    // add criterion mu lambda_c n_iter lr as params
+    /*
+// add criterion mu lambda_c n_iter lr as params
 
-    int                        model_counter = (model_dict.size()) - 1;
-    nb::DRef<Eigen::MatrixXf> *p_w           = model_dict.data();
-    nb::DRef<Eigen::MatrixXf> *p_c           = codes.data();
+int                        model_counter = (model_dict.size()) - 1;
+nb::DRef<Eigen::MatrixXf> *p_w           = model_dict.data();
+nb::DRef<Eigen::MatrixXf> *p_c           = codes.data();
 
-    for (int i = id_codes.size() - 1; i >= 0; --i) {
-        Eigen::MatrixXf output;
-        size_t          idx = id_codes[i];
-        // Think atm this will change when the other changes so need to fix
-        // thast
-        Eigen::MatrixXf codes_initial = *(p_c + i);
-        if (std::find(id_codes.begin(), id_codes.end(), idx + 1) !=
-            id_codes.end()) {
-            int y = model_mods[idx + 1];
-            if (y == 0) {
-                output = lin(output, *(p_w + model_counter - 1),
-                             *(p_w + model_counter));
-                model_counter -= 2;
-            }
+for (int i = id_codes.size() - 1; i >= 0; --i) {
+Eigen::MatrixXf output;
+size_t          idx = id_codes[i];
+// Think atm this will change when the other changes so need to fix
+// thast
+Eigen::MatrixXf codes_initial = *(p_c + i);
+if (std::find(id_codes.begin(), id_codes.end(), idx + 1) !=
+id_codes.end()) {
+int y = model_mods[idx + 1];
+if (y == 0) {
+output = lin(output, *(p_w + model_counter - 1),
+             *(p_w + model_counter));
+model_counter -= 2;
+}
+} else {
+if (idx + 1 < model_mods.size()) {
+int y = model_mods[idx + 1];
+if (y == 1) {
+    output = ReLU(*(p_c + i));
+} else if (y == 2) {
+    output = sigmoid(*(p_c + i));
+} else if (y == 3) {
+    output = *(p_c + i);
+    for (int j = idx + 2; j < model_mods.size(); ++j) {
+        std::cout << "j: " << j << "\n";
+        int x = model_mods[j];
+        std::cout << "x: " << x << "\n";
+        if (x == 0) {
+            output = lin(output, *(p_w + model_counter - 1),
+                         *(p_w + model_counter));
+            model_counter -= 2;
+        } else if (x == 1) {
+            output = ReLU(output);
+        } else if (x == 2) {
+            output = sigmoid(output);
         } else {
-            if (idx + 1 < model_mods.size()) {
-                int y = model_mods[idx + 1];
-                if (y == 1) {
-                    output = ReLU(*(p_c + i));
-                } else if (y == 2) {
-                    output = sigmoid(*(p_c + i));
-                } else if (y == 3) {
-                    output = *(p_c + i);
-                    for (int j = idx + 2; j < model_mods.size(); ++j) {
-                        std::cout << "j: " << j << "\n";
-                        int x = model_mods[j];
-                        std::cout << "x: " << x << "\n";
-                        if (x == 0) {
-                            output = lin(output, *(p_w + model_counter - 1),
-                                         *(p_w + model_counter));
-                            model_counter -= 2;
-                        } else if (x == 1) {
-                            output = ReLU(output);
-                        } else if (x == 2) {
-                            output = sigmoid(output);
-                        } else {
-                            std::cout << "Layer not imp yet";
-                            break;
-                        }
-                    }
-
-                } else {
-                    std::cout << "Layer not imp yet";
-                    break;
-                }
-            }
-            // model_mods[idx + 1] != 3 current method for handling combined
-            // last layer should find a more elegant solution
-            if (idx + 2 < model_mods.size() && model_mods[idx + 1] != 3) {
-                int y = model_mods[idx + 2];
-                if (y == 0) {
-                    output = lin(output, *(p_w + model_counter - 1),
-                                 *(p_w + model_counter));
-                    model_counter -= 2;
-                } else {
-                    std::cout << "Layer not imp yet";
-                    break;
-                }
-            }
+            std::cout << "Layer not imp yet";
+            break;
         }
-
-        /*
-        for (size_t num_iter = 0; num_iter < 1; ++num_iter) {
-            // optimizer.zero_grad()
-            // loss = compute_codes_loss(
-            //    codes[-l], nmod, lin, loss_fn, codes_initial, mu, lambda_c)
-
-            float loss;
-            // float loss = 1/mu;
-            // REMEMBER to add 1/mu bacj at sine oiubt
-            if (i == id_codes.size() - 1) {
-                loss = BCELoss(output, targets)
-            } else {
-                loss = MSELoss(codes, *(p_c + i + 1))
-            }
-
-            loss += MSELoss(*(p_c + i), codes_inital)
-                    // codes_targets) if lambda_c > 0.0: loss +=
-                    // (lambda_c/mu)*codes.abs().mean()
-                    // loss.backward()
-                    // optimizer.step()
-                    std::cout
-                    << loss << "\n";
-        }*/
-        std::cout << output;
-        break;
     }
 
-    // return codes;
-    std::cout << "\n end \n";
+} else {
+    std::cout << "Layer not imp yet";
+    break;
+}
+}
+// model_mods[idx + 1] != 3 current method for handling combined
+// last layer should find a more elegant solution
+if (idx + 2 < model_mods.size() && model_mods[idx + 1] != 3) {
+int y = model_mods[idx + 2];
+if (y == 0) {
+    output = lin(output, *(p_w + model_counter - 1),
+                 *(p_w + model_counter));
+    model_counter -= 2;
+} else {
+    std::cout << "Layer not imp yet";
+    break;
+}
+}
+}
+
+/*
+for (size_t num_iter = 0; num_iter < 1; ++num_iter) {
+// optimizer.zero_grad()
+// loss = compute_codes_loss(
+//    codes[-l], nmod, lin, loss_fn, codes_initial, mu, lambda_c)
+
+float loss;
+// float loss = 1/mu;
+// REMEMBER to add 1/mu bacj at sine oiubt
+if (i == id_codes.size() - 1) {
+loss = BCELoss(output, targets)
+} else {
+loss = MSELoss(codes, *(p_c + i + 1))
+}
+
+loss += MSELoss(*(p_c + i), codes_inital)
+    // codes_targets) if lambda_c > 0.0: loss +=
+    // (lambda_c/mu)*codes.abs().mean()
+    // loss.backward()
+    // optimizer.step()
+    std::cout
+    << loss << "\n";
+}
+std::cout << output;
+break;
+}
+
+// return codes;
+std::cout << "\n end \n";
+*/
     return 0;
 }
 

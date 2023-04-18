@@ -88,7 +88,8 @@
         "mprealsupport": "cpp",
         "numericaldiff": "cpp",
         "openglsupport": "cpp",
-        "specialfunctions": "cpp"
+        "specialfunctions": "cpp",
+        "*.expression": "cpp"
     },
     "editor.formatOnSave": true,
     "clang-format.executable": "/usr/bin/clang-format-15"
