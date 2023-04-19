@@ -12,7 +12,7 @@ import unittest
 
 from altmin import get_mods, get_codes
 
-from control_flow import cf_get_codes
+from control_flow import cf_get_codes, cf_update_codes
 
 from models import simpleNN
 
@@ -111,18 +111,26 @@ class TestCriterion(unittest.TestCase):
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
     def test_batch_BCELoss(self):
-        targets = torch.rand(5, 10, dtype=torch.double)
+        targets = torch.round(torch.rand(5, 10, dtype=torch.double))
         predictions = torch.rand(5, 10, dtype=torch.double)
         cpp_loss = nanobind_criterion.BCELoss(predictions, targets)
         python_loss = nn.BCELoss()(predictions, targets)
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
     def test_MSELoss(self):
-        predictions = np.random.rand(10)
-        targets = np.random.rand(10)
+        targets = torch.rand(1, 10, dtype=torch.double)
+        predictions = torch.rand(1, 10, dtype=torch.double)
         cpp_loss = nanobind_criterion.MSELoss(predictions, targets)
         python_loss = nn.functional.mse_loss(
-            torch.from_numpy(predictions), torch.from_numpy(targets))
+            predictions, targets)
+        self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
+
+    def test_batch_MSELoss(self):
+        targets = torch.rand(5, 10, dtype=torch.double)
+        predictions = torch.rand(5, 10, dtype=torch.double)
+        cpp_loss = nanobind_criterion.MSELoss(predictions, targets)
+        python_loss = nn.functional.mse_loss(
+            predictions, targets)
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
 # Forward pass using cpp to calculate the layers
@@ -155,62 +163,22 @@ class TestGetCodes(unittest.TestCase):
                 python_codes[x].detach().numpy(), cpp_codes[x].numpy())
 
 
-'''
 class TestUpdateCodes(unittest.TestCase):
     def test_update_codes(self):
         model = simpleNN(2, [4, 3], 1)
         model = get_mods(model)
-        in_tensor = torch.rand(5, 2)
+        in_tensor = torch.rand(5, 2, dtype=torch.double)
+        targets = torch.round(torch.rand(5, 1, dtype=torch.double))
 
         # Ignore Flatten for now
         model = model[1:]
-        id_codes = [i for i, m in enumerate(model) if hasattr(
-            m, 'has_codes') and getattr(m, 'has_codes')]
 
-        layer_map = []
-        for mod in model:
-            if isinstance(mod, nn.Linear):
-                layer_map.append(0)
-            elif isinstance(mod, nn.ReLU):
-                layer_map.append(1)
-            elif isinstance(mod, nn.Sigmoid):
-                layer_map.append(2)
-            elif isinstance(mod, nn.Sequential):
-                layer_map.append(3)
-            else:
-                print("layer not imp yet")
+        cpp_out, cpp_codes = cf_get_codes(model, in_tensor)
 
-        for mod in model[-1]:
-            if isinstance(mod, nn.Linear):
-                layer_map.append(0)
-            elif isinstance(mod, nn.ReLU):
-                layer_map.append(1)
-            elif isinstance(mod, nn.Sigmoid):
-                layer_map.append(2)
-            else:
-                print("layer not imp yet")
+        print(model[3](cpp_codes[-1]))
 
-        layer_map = np.asarray(layer_map)
+        cf_update_codes(cpp_codes, model, targets)
 
-        tmp = model.state_dict()
-        for key in tmp.keys():
-            if 'bias' in key:
-                tmp[key] = torch.reshape(tmp[key], (1, len(tmp[key])))
-
-        print(model)
-        print(id_codes)
-        print(tmp)
-        print(layer_map)
-
-        tmp = list(tmp.values())
-
-        codes = [torch.rand(5, 4), torch.rand(5, 3)]
-        print(model[3](codes[-1]))
-        targets = np.random.choice([0.0, 1.0], 10)
-        cpp_codes = nanobind_get_codes.update_codes(
-            codes, layer_map, id_codes, targets, tmp)
-
-'''
 
 if __name__ == '__main__':
     unittest.main()
