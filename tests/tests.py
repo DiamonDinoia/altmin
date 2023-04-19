@@ -16,6 +16,9 @@ from control_flow import cf_get_codes
 
 from models import simpleNN
 
+import sys
+
+
 # This test basically just checks nanobind is still working in it's simplest form
 
 
@@ -41,74 +44,78 @@ class TestMatrixMultiplication(unittest.TestCase):
 
 
 class TestLayers(unittest.TestCase):
+    # Assert all values are the same to tolerance of ulp
+    def check_equal(self, cpp_imp, python_imp):
+        for x in range(len(cpp_imp)):
+            for y in range(len(cpp_imp[x])):
+                assert(abs(cpp_imp[x][y] - python_imp[x]
+                           [y]) <= sys.float_info.epsilon)
+
     def test_lin(self):
-        lin = nn.Linear(2, 4)
-        in_tensor = torch.rand(1, 2)
+        lin = nn.Linear(2, 4).double()
+        in_tensor = torch.rand(1, 2, dtype=torch.double)
         weight = lin.weight.data
         bias = torch.reshape(lin.bias.data, (len(lin.bias.data), 1))
-
         cpp_imp = nanobind_layers.lin(in_tensor,
                                       weight, bias)
-
-        python_imp = lin(in_tensor).detach().numpy().astype(np.float64)
-
-        assert(np.allclose(python_imp, cpp_imp, rtol=1e-04, atol=1e-07))
+        python_imp = lin(in_tensor).detach().numpy()
+        self.check_equal(cpp_imp, python_imp)
 
     def test_lin_batch(self):
-        lin = nn.Linear(10, 30)
-        in_tensor = torch.rand(5, 10)
+        lin = nn.Linear(4, 6).double()
+        in_tensor = torch.rand(5, 4, dtype=torch.double)
         weight = lin.weight.data
         bias = torch.reshape(lin.bias.data, (len(lin.bias.data), 1))
-
         cpp_imp = nanobind_layers.lin(in_tensor,
                                       weight, bias)
-
-        python_imp = lin(in_tensor).detach().numpy().astype(np.float64)
-        assert(np.allclose(python_imp, cpp_imp, rtol=1e-04, atol=1e-07))
+        python_imp = lin(in_tensor).detach().numpy()
+        self.check_equal(cpp_imp, python_imp)
 
     # Functions for relu and sigmoid are in place so they don't need to return a value
+
     def test_ReLU(self):
         relu = nn.ReLU()
-        in_tensor = torch.rand(5, 10)
+        in_tensor = torch.rand(5, 10, dtype=torch.double)
         python_imp = relu(in_tensor)
         # In tensor data updated in place
         nanobind_layers.ReLU(
             in_tensor)
-        assert(np.allclose(python_imp, in_tensor, rtol=1e-04, atol=1e-07))
+
+        in_tensor = in_tensor.numpy()
+        self.check_equal(in_tensor, python_imp)
 
     def test_sigmoid(self):
         sigmoid = nn.Sigmoid()
-        in_tensor = torch.rand(5, 10)
+        in_tensor = torch.rand(5, 10, dtype=torch.double)
         python_imp = sigmoid(in_tensor)
         # In tensor data changed in place?
         nanobind_layers.sigmoid(
             in_tensor)
 
-        assert(np.allclose(python_imp, in_tensor, rtol=1e-04, atol=1e-07))
+        in_tensor = in_tensor.numpy()
+        self.check_equal(in_tensor, python_imp)
+
 
 # Testing the cpp implementation of BCEloss and MSEloss
 # Also test the fuctions ability to calculate loss on batch input
 # Again take reference to tensor as input so no data copied between
-
-
+# Can't use epsilon as these diverge slightly around 8 decimal places but no a priority to fix rn but I'll come back to this
 class TestCriterion(unittest.TestCase):
     def test_BCELoss(self):
-        targets = torch.round(torch.rand(1, 10))
-        predictions = torch.rand(1, 10)
+        targets = torch.round(torch.rand(1, 10, dtype=torch.double))
+        predictions = torch.rand(1, 10, dtype=torch.double)
         # print(targets)
         # print(predictions)
         cpp_loss = nanobind_criterion.BCELoss(predictions, targets)
         python_loss = nn.BCELoss()(predictions, targets)
-
-        self.assertAlmostEqual(cpp_loss, python_loss.item(), 4)
+        self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
     def test_batch_BCELoss(self):
-        targets = torch.rand(5, 10)
-        predictions = torch.rand(5, 10)
+        targets = torch.rand(5, 10, dtype=torch.double)
+        predictions = torch.rand(5, 10, dtype=torch.double)
         cpp_loss = nanobind_criterion.BCELoss(predictions, targets)
         python_loss = nn.BCELoss()(predictions, targets)
-
-        self.assertAlmostEqual(cpp_loss, python_loss.item(), 4)
+        self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
     def test_MSELoss(self):
         predictions = np.random.rand(10)
@@ -116,16 +123,23 @@ class TestCriterion(unittest.TestCase):
         cpp_loss = nanobind_criterion.MSELoss(predictions, targets)
         python_loss = nn.functional.mse_loss(
             torch.from_numpy(predictions), torch.from_numpy(targets))
-        self.assertAlmostEqual(cpp_loss, python_loss.item(), 4)
+        self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
 # Forward pass using cpp to calculate the layers
 
 
 class TestGetCodes(unittest.TestCase):
+    # Assert all values are the same to tolerance of ulp
+    def check_equal(self, cpp_imp, python_imp):
+        for x in range(len(cpp_imp)):
+            for y in range(len(cpp_imp[x])):
+                assert(abs(cpp_imp[x][y] - python_imp[x]
+                           [y]) <= sys.float_info.epsilon)
+
     def test_get_codes(self):
         model = simpleNN(2, [4, 3], 1)
         model = get_mods(model)
-        in_tensor = torch.rand(5, 2)
+        in_tensor = torch.rand(5, 2, dtype=torch.double)
 
         # Ignore Flatten for now
         model = model[1:]
@@ -134,17 +148,14 @@ class TestGetCodes(unittest.TestCase):
 
         cpp_out, cpp_codes = cf_get_codes(model, in_tensor)
 
-        assert(np.allclose(python_out.detach().numpy(),
-               cpp_out, rtol=1e-04, atol=1e-07))
+        self.check_equal(python_out.detach().numpy(), cpp_out.numpy())
 
         for x in range(len(cpp_codes)):
-            assert(np.allclose(python_codes[x].detach().numpy(),
-                               cpp_codes[x], rtol=1e-04, atol=1e-07))
+            self.check_equal(
+                python_codes[x].detach().numpy(), cpp_codes[x].numpy())
 
 
 '''
-
-
 class TestUpdateCodes(unittest.TestCase):
     def test_update_codes(self):
         model = simpleNN(2, [4, 3], 1)

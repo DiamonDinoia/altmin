@@ -20,6 +20,7 @@ class simpleNN(nn.Module):
         self.classifier.add_module(str(len(self.classifier)), nn.Sigmoid())
         self.n_inputs = input_dim
         self.n_outputs = output_dim
+        self.classifier.double()
 
     def forward(self, x):
         #x = x.view(x.size(0), -1)

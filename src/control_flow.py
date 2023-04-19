@@ -33,9 +33,6 @@ def cf_get_codes(model_mods, inputs):
             # I can probably tell cpp to return a tensor instead of a numpy
             # I'll come back to this
 
-            print(type(x))
-            print(type(weight))
-            print(type(bias))
             x = torch.from_numpy(nanobind_layers.lin(x, weight, bias))
         elif isinstance(m, nn.ReLU):
             nanobind_layers.ReLU(x)
