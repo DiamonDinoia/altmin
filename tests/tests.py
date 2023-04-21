@@ -10,9 +10,9 @@ import nanobind_layers
 import nanobind_criterion
 import unittest
 
-from altmin import get_mods, get_codes
+from altmin import get_mods, get_codes, update_codes
 
-from control_flow import cf_get_codes, cf_update_codes
+from control_flow import cf_get_codes, cf_update_codes, test_loss
 
 from models import simpleNN
 
@@ -175,9 +175,10 @@ class TestUpdateCodes(unittest.TestCase):
 
         cpp_out, cpp_codes = cf_get_codes(model, in_tensor)
 
-        print(model[3](cpp_codes[-1]))
-
-        cf_update_codes(cpp_codes, model, targets)
+        #cf_update_codes(cpp_codes, model, targets)
+        test_loss()
+        # update_codes(cpp_codes, model, targets, nn.BCELoss(),
+        #  mu = 0.003, lambda_c = 0.0, n_iter = 5, lr = 0.3)
 
 
 if __name__ == '__main__':
