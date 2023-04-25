@@ -22,11 +22,24 @@ Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> lin(
     return res;
 }
 
+Eigen::MatrixXd ReLU(nb::DRef<Eigen::MatrixXd> input) {
+    int             N = input.rows();
+    int             M = input.cols();
+    Eigen::MatrixXd res(N, M);
+
+    for (size_t i = 0; i < N; ++i) {
+        for (size_t j = 0; j < M; ++j) {
+            res(i, j) = std::max(input(i, j), 0.0);
+        }
+    }
+    return res;
+}
+
 // Maybe should iterate in the opposite direction as should go in storage order
 // but again I'll come back to this
 // Also note the reference to the data is passed and the data is changed in
 // place so nothing returned
-void ReLU(nb::DRef<Eigen::MatrixXd> input) {
+void ReLU_inplace(nb::DRef<Eigen::MatrixXd> input) {
     int N = input.rows();
     int M = input.cols();
     for (size_t i = 0; i < N; ++i) {
@@ -41,7 +54,23 @@ void ReLU(nb::DRef<Eigen::MatrixXd> input) {
 // but again I'll come back to this
 // Also note the reference to the data is passed and the data is changed in
 // place so nothing returned
-void sigmoid(nb::DRef<Eigen::MatrixXd> input) {
+Eigen::MatrixXd sigmoid(nb::DRef<Eigen::MatrixXd> input) {
+    int             N = input.rows();
+    int             M = input.cols();
+    Eigen::MatrixXd res(N, M);
+    for (size_t i = 0; i < N; ++i) {
+        for (size_t j = 0; j < M; ++j) {
+            res(i, j) = 1.0 / (1.0 + std::exp(-input(i, j)));
+        }
+    }
+    return res;
+}
+
+// Maybe should iterate in the opposite direction as should go in storage order
+// but again I'll come back to this
+// Also note the reference to the data is passed and the data is changed in
+// place so nothing returned
+void sigmoid_inplace(nb::DRef<Eigen::MatrixXd> input) {
     int N = input.rows();
     int M = input.cols();
     for (size_t i = 0; i < N; ++i) {

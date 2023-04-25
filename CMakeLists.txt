@@ -147,6 +147,10 @@ nanobind_add_module(nanobind_criterion include/nanobind_criterion.hpp src/nanobi
 target_include_directories(nanobind_criterion PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(nanobind_criterion PRIVATE Eigen)
 
+nanobind_add_module(nanobind_derivatives include/nanobind_derivatives.hpp src/nanobind_derivatives.cpp)
+target_include_directories(nanobind_derivatives PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(nanobind_derivatives PRIVATE Eigen)
+
 
 install(TARGETS eigen_example DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_hello_world DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
@@ -155,6 +159,7 @@ install(TARGETS nanobind_pass_dict DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_layers DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_get_codes DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(TARGETS nanobind_criterion DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+install(TARGETS nanobind_derivatives DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)

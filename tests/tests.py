@@ -8,11 +8,14 @@ import nanobind_hello_world
 import nanobind_pass_dict
 import nanobind_layers
 import nanobind_criterion
+import nanobind_derivatives
 import unittest
-
+import math
 from altmin import get_mods, get_codes, update_codes
 
-from control_flow import cf_get_codes, cf_update_codes, test_loss
+from torch.optim.lr_scheduler import LambdaLR
+import torch.optim as optim
+from control_flow import cf_get_codes, cf_update_codes
 
 from models import simpleNN
 
@@ -78,22 +81,20 @@ class TestLayers(unittest.TestCase):
         in_tensor = torch.rand(5, 10, dtype=torch.double)
         python_imp = relu(in_tensor)
         # In tensor data updated in place
-        nanobind_layers.ReLU(
+        cpp_imp = nanobind_layers.ReLU(
             in_tensor)
 
-        in_tensor = in_tensor.numpy()
-        self.check_equal(in_tensor, python_imp)
+        self.check_equal(cpp_imp, python_imp)
 
     def test_sigmoid(self):
         sigmoid = nn.Sigmoid()
         in_tensor = torch.rand(5, 10, dtype=torch.double)
         python_imp = sigmoid(in_tensor)
         # In tensor data changed in place?
-        nanobind_layers.sigmoid(
+        cpp_imp = nanobind_layers.sigmoid(
             in_tensor)
 
-        in_tensor = in_tensor.numpy()
-        self.check_equal(in_tensor, python_imp)
+        self.check_equal(cpp_imp, python_imp)
 
 
 # Testing the cpp implementation of BCEloss and MSEloss
@@ -133,6 +134,53 @@ class TestCriterion(unittest.TestCase):
             predictions, targets)
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
+
+class TestDerivatives(unittest.TestCase):
+
+    def test_ReLU_derivative(self):
+        in_tensor = torch.rand(5, 3)
+        in_tensor -= 0.5
+        out = nanobind_derivatives.differentiate_ReLU(in_tensor)
+        for x in range(len(out)):
+            for y in range(len(out[x])):
+                if in_tensor[x][y] >= 0.0:
+                    assert(out[x][y] == 1.0)
+                else:
+                    assert(out[x][y] == 0.0)
+
+    '''
+    def test_sigmoid_derivative(self):
+        in_tensor = torch.rand(5, 3)
+
+        tmp = nn.Sigmoid()(in_tensor)
+        python_imp = tmp * (1.0-tmp)
+        cpp_imp = torch.from_numpy(
+            nanobind_derivatives.differentiate_sigmoid(in_tensor))
+        for x in range(len(cpp_imp)):
+            for y in range(len(cpp_imp[x])):
+                assert(abs(cpp_imp[x][y] - python_imp[x]
+                           [y]) <= sys.float_info.epsilon*math.pow(10, 10))
+    '''
+
+    def test_lin_derivative(self):
+        lin = nn.Linear(2, 4).double()
+        x = torch.rand(1, 2, dtype=torch.double)
+        targets = torch.rand(1, 4, dtype=torch.double)
+        for y in range(10):
+
+            loss = torch.nn.functional.mse_loss(lin(x), targets)
+            print(loss)
+            w = lin.weight.clone().detach()
+            b = lin.bias.clone().detach()
+
+            grad_w = 0.3*np.matmul(x.T, ((np.matmul(x, w.T)+b)-targets))
+            grad_b = 0.3*np.matmul(x, w.T)+b-targets
+            # print(lin.weight)
+            lin.weight = nn.Parameter((w.T-grad_w).T)
+            lin.bias = nn.Parameter(b - grad_b)
+            # print(lin.weight)
+
+
 # Forward pass using cpp to calculate the layers
 
 
@@ -164,6 +212,18 @@ class TestGetCodes(unittest.TestCase):
 
 
 class TestUpdateCodes(unittest.TestCase):
+    # Assert all values are the same to tolerance of ulp
+    def check_equal(self, cpp_imp, python_imp):
+        for x in range(len(cpp_imp)):
+            for y in range(len(cpp_imp[x])):
+                assert(abs(cpp_imp[x][y] - python_imp[x]
+                           [y]) <= sys.float_info.epsilon)
+
+    # Need to ask Marco about this
+    # Because the optimisation problems are solves via sgd using tools from pytorch which already calls cpp
+    # So is it worth reinventing the wheel
+    # And how do I go about it I would need to work out how to calculate the derivative of the optimisation problems
+    # Which is doable but is it worth it
     def test_update_codes(self):
         model = simpleNN(2, [4, 3], 1)
         model = get_mods(model)
@@ -175,10 +235,13 @@ class TestUpdateCodes(unittest.TestCase):
 
         cpp_out, cpp_codes = cf_get_codes(model, in_tensor)
 
-        #cf_update_codes(cpp_codes, model, targets)
-        test_loss()
-        # update_codes(cpp_codes, model, targets, nn.BCELoss(),
-        #  mu = 0.003, lambda_c = 0.0, n_iter = 5, lr = 0.3)
+        python_updated_codes = update_codes(
+            cpp_codes, model, targets, nn.BCELoss(), mu=0.003, lambda_c=0.0, n_iter=5, lr=0.3)
+        cpp_updated_codes = cf_update_codes(cpp_codes, model, targets)
+
+        for x in range(len(cpp_codes)):
+            self.check_equal(
+                python_updated_codes[x].detach().numpy(), cpp_updated_codes[x].detach().numpy())
 
 
 if __name__ == '__main__':
