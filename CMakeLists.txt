@@ -113,6 +113,27 @@ if(Eigen_ADDED)
 endif()
 
 CPMAddPackage(
+        NAME optim
+        GIT_REPOSITORY https://github.com/kthohr/optim
+        GIT_TAG master
+        GIT_SHALLOW YES
+        GIT_PROGRESS YES
+        EXCLUDE_FROM_ALL YES
+        SYSTEM YES
+
+)
+
+if(optim_ADDED)
+  add_library(optim INTERFACE IMPORTED)
+  target_include_directories(optim INTERFACE ${optim_SOURCE_DIR})
+endif()
+
+message("Jisdf")
+message(${Eigen_SOURCE_DIR})
+message(${optim_SOURCE_DIR})
+message("HJIJI")
+
+CPMAddPackage(
         NAME nanobind
         GIT_REPOSITORY https://github.com/wjakob/nanobind
         GIT_TAG ${NANOBIND_DOWNLOAD_VERSION}
@@ -122,44 +143,14 @@ CPMAddPackage(
         SYSTEM YES
 )
 
+#install(DIRECTORY ${optim_SOURCE_DIR}/include/ DESTINATION ${CMAKE_SOURCE_DIR}/include )
 
-
-add_executable(eigen_example src/eigen.cpp)
-target_link_libraries(eigen_example PRIVATE Eigen)
-
-nanobind_add_module(nanobind_hello_world src/nanobind_hello_world.cpp)
-
-nanobind_add_module(nanobind_matrix_funcs src/nanobind_matrix_funcs.cpp)
-target_link_libraries(nanobind_matrix_funcs PRIVATE Eigen)
-
-nanobind_add_module(nanobind_pass_dict src/nanobind_pass_dict.cpp)
-target_link_libraries(nanobind_pass_dict PRIVATE Eigen)
-
-nanobind_add_module(nanobind_layers include/nanobind_layers.hpp src/nanobind_layers.cpp)
-target_include_directories(nanobind_layers PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(nanobind_layers PRIVATE Eigen)
-
-nanobind_add_module(nanobind_get_codes include/nanobind_layers.hpp src/nanobind_get_codes.cpp)
-target_include_directories(nanobind_get_codes PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(nanobind_get_codes PRIVATE Eigen)
-
-nanobind_add_module(nanobind_criterion include/nanobind_criterion.hpp src/nanobind_criterion.cpp)
-target_include_directories(nanobind_criterion PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(nanobind_criterion PRIVATE Eigen)
-
-nanobind_add_module(nanobind_derivatives include/nanobind_derivatives.hpp src/nanobind_derivatives.cpp)
-target_include_directories(nanobind_derivatives PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(nanobind_derivatives PRIVATE Eigen)
-
-
-install(TARGETS eigen_example DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_hello_world DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_matrix_funcs DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_pass_dict DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_layers DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_get_codes DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_criterion DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(TARGETS nanobind_derivatives DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+nanobind_add_module(nanobind src/nanobind.cpp)
+target_include_directories(nanobind PRIVATE ${CMAKE_SOURCE_DIR}/include)
+#target_include_directories(nanobind PRIVATE ${optim_SOURCE_DIR}/include )
+target_link_libraries(nanobind PRIVATE optim)
+target_link_libraries(nanobind PRIVATE Eigen)
+install(TARGETS nanobind DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)

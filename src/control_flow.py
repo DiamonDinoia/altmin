@@ -3,13 +3,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-import nanobind_get_codes
-import nanobind_matrix_funcs
-import nanobind_hello_world
-import nanobind_pass_dict
-import nanobind_layers
-import nanobind_derivatives
-import nanobind_criterion
+import nanobind
 import unittest
 
 from altmin import get_mods, get_codes
@@ -24,22 +18,22 @@ def select_func(m, x, tmp, i):
         # I can probably tell cpp to return a tensor instead of a numpy
         # I'll come back to this
 
-        x = torch.from_numpy(nanobind_layers.lin(x, weight, bias))
+        x = torch.from_numpy(nanobind.lin(x, weight, bias))
     elif isinstance(m, nn.ReLU):
-        nanobind_layers.ReLU_inplace(x)
+        nanobind.ReLU_inplace(x)
     elif isinstance(m, nn.Sigmoid):
-        nanobind_layers.sigmoid_inplace(x)
+        nanobind.sigmoid_inplace(x)
     elif isinstance(m, nn.Sequential):
         for n in m:
             if isinstance(n, nn.Linear):
                 weight = tmp[i]
                 bias = torch.reshape(tmp[i+1], (len(tmp[i+1]), 1))
                 i += 2
-                x = torch.from_numpy(nanobind_layers.lin(x, weight, bias))
+                x = torch.from_numpy(nanobind.lin(x, weight, bias))
             elif isinstance(n, nn.ReLU):
-                nanobind_layers.ReLU_inplace(x)
+                nanobind.ReLU_inplace(x)
             elif isinstance(n, nn.Sigmoid):
-                nanobind_layers.sigmoid_inplace(x)
+                nanobind.sigmoid_inplace(x)
     else:
         print("layer not imp yet")
     return x, i
@@ -158,7 +152,7 @@ def update_hidden_weights_adam_cpp(model_mods, inputs, codes, lambda_w, n_iter):
         for it in range(n_iter):
             lin.optimizer.zero_grad()
             if idx == 1:
-                loss = nanobind_criterion.MSELoss(lin(c_in), c_out.detach())
+                loss = nanobind.MSELoss(lin(c_in), c_out.detach())
 
             #loss = nn.functional.mse_loss(lin(nmod(c_in)), c_out.detach())
             if lambda_w > 0.0:
