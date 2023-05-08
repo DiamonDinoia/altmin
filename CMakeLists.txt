@@ -125,7 +125,7 @@ CPMAddPackage(
 
 if(optim_ADDED)
   add_library(optim INTERFACE IMPORTED)
-  target_include_directories(optim INTERFACE ${optim_SOURCE_DIR})
+  target_include_directories(optim INTERFACE ${optim_SOURCE_DIR}/include)
 endif()
 
 message("Jisdf")
@@ -147,7 +147,6 @@ CPMAddPackage(
 
 nanobind_add_module(nanobind src/nanobind.cpp)
 target_include_directories(nanobind PRIVATE ${CMAKE_SOURCE_DIR}/include)
-#target_include_directories(nanobind PRIVATE ${optim_SOURCE_DIR}/include )
 target_link_libraries(nanobind PRIVATE optim)
 target_link_libraries(nanobind PRIVATE Eigen)
 install(TARGETS nanobind DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
