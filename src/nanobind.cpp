@@ -6,10 +6,6 @@
 
 #include <iostream>
 
-#define OPTIM_ENABLE_EIGEN_WRAPPERS
-#include <optim.hpp>
-
-#define OPTIM_PI 3.14159265358979
 
 int hello_world() {
     std::cout << "c++: Hello World";
@@ -51,7 +47,7 @@ double ackley_fn(const Eigen::VectorXd &vals_inp, Eigen::VectorXd *grad_out,
         20 + std::exp(1) -
         20 * std::exp(-0.2 * std::sqrt(0.5 * (x * x + y * y))) -
         std::exp(0.5 *
-                 (std::cos(2 * OPTIM_PI * x) + std::cos(2 * OPTIM_PI * y)));
+                 (std::cos(2 * M_PI * x) + std::cos(2 * M_PI * y)));
 
     return obj_val;
 }
@@ -60,13 +56,12 @@ int main_test() {
     Eigen::VectorXd x =
         2.0 * Eigen::VectorXd::Ones(2);  // initial values: (2,2)
 
-    bool success = optim::de(x, ackley_fn, nullptr);
 
-    if (success) {
-        std::cout << "de: Ackley test completed successfully." << std::endl;
-    } else {
-        std::cout << "de: Ackley test completed unsuccessfully." << std::endl;
-    }
+    // if (success) {
+    //     std::cout << "de: Ackley test completed successfully." << std::endl;
+    // } else {
+    //     std::cout << "de: Ackley test completed unsuccessfully." << std::endl;
+    // }
 
     std::cout << "de: solution to Ackley test:\n" << x << std::endl;
 

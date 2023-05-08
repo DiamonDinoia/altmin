@@ -113,25 +113,14 @@ if(Eigen_ADDED)
 endif()
 
 CPMAddPackage(
-        NAME optim
-        GIT_REPOSITORY https://github.com/kthohr/optim
-        GIT_TAG master
+        NAME gsl
+        GITHUB_REPOSITORY ampl/gsl
+        VERSION 2.7.0
         GIT_SHALLOW YES
         GIT_PROGRESS YES
         EXCLUDE_FROM_ALL YES
         SYSTEM YES
-
 )
-
-if(optim_ADDED)
-  add_library(optim INTERFACE IMPORTED)
-  target_include_directories(optim INTERFACE ${optim_SOURCE_DIR}/include)
-endif()
-
-message("Jisdf")
-message(${Eigen_SOURCE_DIR})
-message(${optim_SOURCE_DIR})
-message("HJIJI")
 
 CPMAddPackage(
         NAME nanobind
@@ -147,8 +136,7 @@ CPMAddPackage(
 
 nanobind_add_module(nanobind src/nanobind.cpp)
 target_include_directories(nanobind PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(nanobind PRIVATE optim)
-target_link_libraries(nanobind PRIVATE Eigen)
+target_link_libraries(nanobind PRIVATE Eigen gsl)
 install(TARGETS nanobind DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
 if(ALTMIN_BUILD_TESTS)
