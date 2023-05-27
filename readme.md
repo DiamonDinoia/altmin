@@ -1,6 +1,10 @@
 To run cern dataset with altmin using cpp implementation:
-	In artifacts folder run:
-		python train_model --strategy altmin --cpp 1
+
+In artifacts folder run: python train_model --strategy altmin --cpp 1
+
+Need to download the delphes TTbarFull train set
+
+Also need libtorch downloaded locally atm but this is a priority to fix.
 
 N.b:
 
