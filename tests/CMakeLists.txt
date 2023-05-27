@@ -34,6 +34,12 @@ install(DIRECTORY ${altmin_SOURCE_DIR}/ DESTINATION ${CMAKE_SOURCE_DIR}/artifact
 install(FILES ${CMAKE_SOURCE_DIR}/src/models.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(FILES ${CMAKE_SOURCE_DIR}/src/control_flow.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(FILES ${CMAKE_SOURCE_DIR}/tests/tests.py DESTINATION ${CMAKE_SOURCE_DIR}/tests )
+install(FILES ${CMAKE_SOURCE_DIR}/src/run_altmin_sgd.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
+install(FILES ${CMAKE_SOURCE_DIR}/src/basic_altmin.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
+install(FILES ${CMAKE_SOURCE_DIR}/src/helper_methods.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
+install(FILES ${CMAKE_SOURCE_DIR}/src/train_model.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
+install(FILES ${CMAKE_SOURCE_DIR}/src/dataset.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
+install(FILES ${CMAKE_SOURCE_DIR}/src/manual_altmin.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
 
 
 

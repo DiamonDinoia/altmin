@@ -1,13 +1,21 @@
 #include <math.h>
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <torch/torch.h>
 
 #include <iostream>
 #include <vector>
 
 namespace nb = nanobind;
+
+////////////////////////////////////////////////////////////////////////////////////////
+
+//No functions from in here actually used atm as this is mostly eigen stuff ////////////
+
+/////////////////////////////////////////////////////////////////////////////////////////
 
 // I'm passing a reference to the data location not the data itself
 // So I think it makes the most sense to transpose it here as
@@ -36,6 +44,26 @@ Eigen::MatrixXd ReLU(nb::DRef<Eigen::MatrixXd> input) {
         }
     }
     return res;
+}
+
+// In place and changes passed tensor directly
+void ReLU_autograd(nanobind::ndarray<nanobind::pytorch, float> input) {
+    torch::Tensor conv_in =
+        torch::from_blob(input.data(), {input.shape(0), input.shape(1)});
+    torch::nn::ReLU()->forward(conv_in);
+}
+
+// why relu in place and sigmoid not??????
+// Need to work out how to package torch::Tensor to return it.
+void sigmoid_autograd(nanobind::ndarray<nanobind::pytorch, float> input) {
+    torch::Tensor conv_in =
+        torch::from_blob(input.data(), {input.shape(0), input.shape(1)});
+    torch::Tensor out = torch::sigmoid(conv_in);
+    std::cout << "hi from cpp \n" << out << std::endl;
+    float data = *(out.data_ptr<float>());
+    std::cout << "Fuck youi \n";
+    std::cout << data << "jdsgd";
+    size_t shape[2] = {5, 2};
 }
 
 // Maybe should iterate in the opposite direction as should go in storage order

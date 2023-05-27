@@ -122,6 +122,7 @@ CPMAddPackage(
         SYSTEM YES
 )
 
+
 CPMAddPackage(
         NAME nanobind
         GIT_REPOSITORY https://github.com/wjakob/nanobind
@@ -132,12 +133,16 @@ CPMAddPackage(
         SYSTEM YES
 )
 
-#install(DIRECTORY ${optim_SOURCE_DIR}/include/ DESTINATION ${CMAKE_SOURCE_DIR}/include )
+
+find_package(Torch REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 nanobind_add_module(nanobind src/nanobind.cpp)
 target_include_directories(nanobind PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(nanobind PRIVATE Eigen gsl)
+target_link_libraries(nanobind PRIVATE Eigen gsl "${TORCH_LIBRARIES}")
 install(TARGETS nanobind DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+
+list(APPEND CMAKE_PREFIX_PATH "libtorch")
 
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)

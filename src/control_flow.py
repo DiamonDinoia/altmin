@@ -35,7 +35,9 @@ def select_func(m, x, tmp, i):
             elif isinstance(n, nn.Sigmoid):
                 nanobind.sigmoid_inplace(x)
     else:
-        print("layer not imp yet")
+        pass
+        #print(m)
+        #print("layer not imp yet")
     return x, i
 
 
@@ -58,64 +60,75 @@ def cf_get_codes(model_mods, inputs):
     # Do not include output of very last linear layer (not counted among codes)
     return x, codes
 
+def conv_mods(nmod, lin):
+    mods = []
+    if isinstance(nmod, nn.ReLU):
+        mods.append(0)
+    elif isinstance(nmod, nn.Sigmoid):
+        mods.append(2)
+    elif isinstance(nmod, nn.Sequential):
+        for mod in nmod:
+            if isinstance(mod, nn.ReLU):
+                mods.append(0)
+            elif isinstance(mod, nn.Linear):
+                mods.append(1)
+            elif isinstance(mod, nn.Sigmoid):
+                mods.append(2)
+    else:
+        pass
+        #print("Not imp")
+    if isinstance(lin, nn.Linear):
+        mods.append(1)
+    return mods
 
-def cf_update_codes(codes, model_mods, targets, mu=0.003, lambda_c=0.0, n_iter=5, lr=0.3):
+def cf_update_codes(codes, model_mods, targets, criterion, momentum_dict, init_vals, mu=0.003, lambda_c=0.0, n_iter=5, lr=0.3):
 
     id_codes = [i for i, m in enumerate(model_mods) if hasattr(
         m, 'has_codes') and getattr(m, 'has_codes')]
 
-    tmp = list(model_mods.state_dict().values())
 
     for l in range(1, len(codes)+1):
         idx = id_codes[-l]
         codes[-l].requires_grad_(True)
-        optimizer = optim.SGD([codes[-l]], lr=lr, momentum=0.9, nesterov=True)
         codes_initial = codes[-l].clone()
 
         if idx+1 in id_codes:
             nmod = (lambda x: x)
             lin = model_mods[idx+1]
         else:
+            nmod, lin = (lambda x: x), (lambda x: x) 
             if idx+1 < len(model_mods):
                 nmod = model_mods[idx+1]
-            else:
-                nmod = (lambda x: x)
-
             if idx+2 < len(model_mods):
                 lin = model_mods[idx+2]
-            else:
-                lin = (lambda x: x)
 
-        for it in range(n_iter):
 
-            optimizer.zero_grad()
-            output = lin(nmod((codes[-l])))
+        #Use int to signify to cpp what loss func to use
+        if l == 1:  # last layer
+            #loss_fn = lambda x: criterion(x, targets)
+            last_layer = 1
+        else:       # intermediate layers
+            #loss_fn = lambda x: mu*torch.nn.functional.mse_loss(x, codes[-l+1].detach())
+            last_layer = 0
+            targets = codes[-l+1]
 
-            if l == 1:
-                loss = (1.0/mu)*nn.BCELoss()(output, targets) + \
-                    torch.nn.functional.mse_loss(codes[-l], codes_initial)
-            else:
-                loss = (1.0/mu)*(mu * torch.nn.functional.mse_loss(
-                    output, codes[-l+1])) + torch.nn.functional.mse_loss(codes[-l], codes_initial)
-
-            loss.backward()
-            optimizer.step()
+        mods = conv_mods(nmod,lin)
+        
+        criterion = 0
+        #I think targets and next codes can be merged into one var
+        lr = 0.3
+        if isinstance(lin, nn.Linear):
+            nanobind.update_codes(lin.weight.data, lin.bias.data, mods, codes[-l], targets, momentum_dict[str(idx)+".code_m"], momentum_dict[str(idx)+".code_v"],
+                                  criterion, n_iter, last_layer, lr, init_vals   )
+        else:
+            nanobind.update_codes(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, momentum_dict[str(idx)+".code_m"], momentum_dict[str(idx)+".code_v"],
+                                   criterion, n_iter, last_layer, lr, init_vals  )
 
     return codes
 
-
-def update_last_layer_(mod_out, inputs, targets, criterion, n_iter):
-    for it in range(n_iter):
-        mod_out.optimizer.zero_grad()
-        outputs = mod_out(inputs)
-        loss = criterion(outputs, targets)
-        loss.backward()
-        mod_out.optimizer.step()
-
-
-def update_hidden_weights_adam_(model_mods, inputs, codes, lambda_w, n_iter):
-    id_codes = [i for i, m in enumerate(model_mods) if hasattr(
-        m, 'has_codes') and getattr(m, 'has_codes')]
+def cf_update_hidden_weights(model_mods, inputs, codes, lambda_w, n_iter, lr, momentum_dict, init_vals):
+    lr_weights = 0.008
+    id_codes = [i for i,m in enumerate(model_mods) if hasattr(m, 'has_codes') and getattr(m, 'has_codes')]
 
     if hasattr(model_mods, 'n_inputs'):
         x = inputs.view(-1, model_mods.n_inputs)
@@ -127,175 +140,22 @@ def update_hidden_weights_adam_(model_mods, inputs, codes, lambda_w, n_iter):
         if idx >= 1 and not idx-1 in id_codes:
             nmod = model_mods[idx-1]
         else:
-            nmod = (lambda x: x)
+            nmod = lambda x: x
 
-        for it in range(n_iter):
-            lin.optimizer.zero_grad()
-            loss = nn.functional.mse_loss(lin(nmod(c_in)), c_out.detach())
-            if lambda_w > 0.0:
-                loss += lambda_w*lin.weight.abs().mean()
-            loss.backward()
-            lin.optimizer.step()
+       
+        mods = conv_mods(nmod, lin)
+       
+        nanobind.update_hidden_weights(lin.weight.data, lin.bias.data, mods, c_in, c_out, momentum_dict[str(idx)+".weight_m"], momentum_dict[str(idx)+".weight_v"],
+                                        momentum_dict[str(idx)+".bias_m"], momentum_dict[str(idx)+".bias_v"], n_iter, lr, init_vals )
 
-
-def update_hidden_weights_adam_cpp(model_mods, inputs, codes, lambda_w, n_iter):
-    id_codes = [i for i, m in enumerate(model_mods) if hasattr(
-        m, 'has_codes') and getattr(m, 'has_codes')]
-    x = inputs
-    for idx, c_in, c_out in zip(id_codes, [x]+codes[:-1], codes):
-        lin = model_mods[idx]
-        if idx >= 1 and not idx-1 in id_codes:
-            nmod = model_mods[idx-1]
-        else:
-            nmod = (lambda x: x)
-
-        for it in range(n_iter):
-            lin.optimizer.zero_grad()
-            if idx == 1:
-                loss = nanobind.MSELoss(lin(c_in), c_out.detach())
-
-            #loss = nn.functional.mse_loss(lin(nmod(c_in)), c_out.detach())
-            if lambda_w > 0.0:
-                loss += lambda_w*lin.weight.abs().mean()
-            loss.backward()
-            print("Gradient of 1st lin: " + str(lin.grad))
-            lin.optimizer.step()
-        break
+        
+def cf_update_last_layer(model, inputs, targets, criterion, n_iter, lr, momentum_dict, init_vals ):
+    #nanobind.update_last_layer(model_mods[1].weight.data, model_mods[1].bias.data, conv_mods(model_mods), inputs, targets, criterion, n_iter)#
+    #conv_mods is set up stupidly
+    nanobind.update_last_layer(model[-1][1].weight.data,model[-1][1].bias.data, conv_mods(model[-1],-1), inputs.detach(), targets, 
+                                           momentum_dict["-1.weight_m"], momentum_dict["-1.weight_v"], momentum_dict["-1.bias_m"], 
+                                           momentum_dict["-1.bias_v"], criterion, n_iter, lr, init_vals )
 
 
-'''
-def cf_update_codes(codes, model_mods, targets, mu=0.003, lambda_c=0.0, n_iter=5, lr=0.3):
 
-    id_codes = [i for i, m in enumerate(model_mods) if hasattr(
-        m, 'has_codes') and getattr(m, 'has_codes')]
-
-    tmp = list(model_mods.state_dict().values())
-
-    for l in range(1, len(codes)+1):
-        idx = id_codes[-l]
-        codes[-l].requires_grad_(True)
-        optimizer = optim.SGD([codes[-l]], lr=lr, momentum=0.9, nesterov=True)
-        codes_initial = codes[-l].clone()
-        i = len(tmp) - 2
-
-        if idx+1 in id_codes:
-            # weight =
-            # bias =
-            # codes[-l] = torch.from_numpy(nanobind_layers.lin(codes[-l], weight, bias))
-            pass
-        else:
-            if idx+1 < len(model_mods):
-                # nmod = model_modes[idx+1]
-                nmod = model_mods[idx+1]
-
-            if idx+2 < len(model_mods):
-                # weight =
-                # bias =
-                # codes[-l] = torch.from_numpy(nanobind_layers.lin(codes[-l], weight, bias))
-                print("two")
-
-        for it in range(2):
-
-            optimizer.zero_grad()
-            # loss = compute_codes_loss(codes[-l], nmod, lin, loss_fn, codes_initial, mu, lambda_c)
-            #output = codes[-l].clone()
-
-            output, _ = select_func(nmod, codes[-l], tmp, i)
-
-            # output.requires_grad_(True)
-
-            if l == 1:
-                # loss = (1.0/mu)*nanobind_criterion.BCELoss(
-                #    output, targets) + nanobind_criterion.MSELoss(codes[-l], codes_initial)
-                loss = (1.0/mu)*nn.BCELoss()(output, targets)  # + \
-                #torch.nn.functional.mse_loss(codes[-l], codes_initial)
-            else:
-                # loss = (1.0/mu)*(mu * nanobind_criterion.MSELoss(
-                # output, codes[-l+1])) + nanobind_criterion.MSELoss(codes[-l], codes_initial)
-                loss = (1.0/mu)*(mu * torch.nn.functional.mse_loss(
-                    output, codes[-l+1])) + torch.nn.functional.mse_loss(codes[-l], codes_initial)
-
-            print("Codes: "+str(codes[-l]))
-            print(nanobind_derivatives.differentiate_last_layer(
-                codes[-l], tmp[i]))
-
-            output = model_mods[3](codes[-l])
-            loss_py = (1.0/mu)*nn.BCELoss()(output, targets)  # + \
-            #torch.nn.functional.mse_loss(codes[-l], codes_initial)
-
-            loss_py.backward()
-
-            print("Gradient of codes[-l]: " + str(codes[-l].grad))
-            optimizer.step()
-
-            break
-        break
-
-    return 3
-'''
-
-'''
-def test_loss():
-    lin = nn.Linear(2, 4).double()
-    in_tensor = torch.rand(1, 2, dtype=torch.double, requires_grad=True)
-    optimizer = optim.SGD([in_tensor], lr=0.3, momentum=0.9, nesterov=True)
-    optimizer.zero_grad()
-
-    out = nn.Sigmoid()(lin(in_tensor))
-    targets = torch.round(torch.rand(1, 4, dtype=torch.double))
-
-    #loss = nn.BCELoss()(out, targets)
-    # print(loss)
-    loss = nanobind_criterion.BCELoss(out, targets)
-    loss = torch.tensor(loss, dtype=torch.float64,
-                        grad_fn='<BinaryCrossEntropyBackwards0>')
-    loss.requires_grad_(True)
-    # loss.backward(gradient = external gradients)
-    loss.backward()
-    print(in_tensor)
-    optimizer.step()
-    print(in_tensor)
-'''
-
-'''
-print("\n\nCodes: ")
-
-            optimizer.zero_grad()
-            # loss = compute_codes_loss(codes[-l], nmod, lin, loss_fn, codes_initial, mu, lambda_c)
-            #output = codes[-l].clone()
-
-            output, _ = select_func(nmod, codes[-l], tmp, i)
-
-            # output.requires_grad_(True)
-
-            if l == 1:
-                loss = (1.0/mu)*nanobind_criterion.BCELoss(
-                    output, targets) + nanobind_criterion.MSELoss(codes[-l], codes_initial)
-            else:
-                loss = (1.0/mu)*(mu * nanobind_criterion.MSELoss(
-                    output, codes[-l+1])) + nanobind_criterion.MSELoss(codes[-l], codes_initial)
-
-            #output = lin(nmod(codes))
-            #loss = (1/mu)*loss_fn(output) + F.mse_loss(codes, codes_targets)
-            print("cpp loss: "+str(loss))
-
-            output = model_mods[3](codes[-l])
-            #output, _ = select_func(nmod, codes[-l], tmp, i)
-
-            output = model_mods[3](codes[-l])
-            x = (1.0/mu)*nn.BCELoss()(output, targets)
-            y = torch.nn.functional.mse_loss(codes[-l], codes_initial)
-
-            #loss_py = x + y
-            loss_py = (1.0/mu)*nn.BCELoss()(output, targets) + \
-                torch.nn.functional.mse_loss(codes[-l], codes_initial)
-            print("x: " + str(x))
-            print("y: "+str(y))
-
-            print("python loss: "+str(loss_py))
-
-            print("Gradient of codes[-l]: " + str(codes[-l].grad))
-            loss_py.backward()
-
-            print("Gradient of codes[-l]: " + str(codes[-l].grad))
-'''
+ 

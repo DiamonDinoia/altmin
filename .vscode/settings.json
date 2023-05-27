@@ -89,7 +89,10 @@
         "numericaldiff": "cpp",
         "openglsupport": "cpp",
         "specialfunctions": "cpp",
-        "*.expression": "cpp"
+        "*.expression": "cpp",
+        "csignal": "cpp",
+        "forward_list": "cpp",
+        "shared_mutex": "cpp"
     },
     "editor.formatOnSave": true,
     "clang-format.executable": "/usr/bin/clang-format-15"
