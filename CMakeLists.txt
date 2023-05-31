@@ -37,7 +37,7 @@ if(ALTMIN_CXX_STANDARD STREQUAL "DETECT")
 foreach(CXX_STANDARD_VAR 23;20;17)
   if("cxx_std_${CXX_STANDARD_VAR}" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
       message(STATUS "Detected support for C++${CXX_STANDARD_VAR} standard")
-      set(CMAKE_CXX_STANDARD ${CXX_STANDARD_VAR})
+      set(ALTMIN_CXX_STANDARD ${CXX_STANDARD_VAR})
       break()
   endif()
 endforeach()
@@ -133,7 +133,15 @@ CPMAddPackage(
         SYSTEM YES
 )
 
-list(APPEND CMAKE_PREFIX_PATH "libtorch")
+execute_process(COMMAND python -c "import torch;print(torch.utils.cmake_prefix_path)"
+    OUTPUT_VARIABLE TORCH_CMAKE_PREFIX_PATH)
+string(REGEX REPLACE "\n$" "" TORCH_CMAKE_PREFIX_PATH "${TORCH_CMAKE_PREFIX_PATH}")
+set(Torch_DIR ${TORCH_CMAKE_PREFIX_PATH}/Torch)
+
+# list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PREFIX_PATH})
+message(STATUS "Torch_DIR ${Torch_DIR}")
+message(STATUS "CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH}")
+
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
@@ -141,7 +149,7 @@ nanobind_add_module(nanobind src/nanobind.cpp)
 target_include_directories(nanobind PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(nanobind PRIVATE Eigen gsl "${TORCH_LIBRARIES}")
 install(TARGETS nanobind DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-
+set_target_properties(nanobind PROPERTIES CXX_STANDARD ${ALTMIN_CXX_STANDARD})
 
 
 if(ALTMIN_BUILD_TESTS)

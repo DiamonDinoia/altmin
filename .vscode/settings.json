@@ -98,5 +98,9 @@
         "span": "cpp"
     },
     "editor.formatOnSave": true,
-    "clang-format.executable": "/usr/bin/clang-format-15"
+    "clang-format.executable": "/usr/bin/clang-format-15",
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.autopep8"
+    },
+    "python.formatting.provider": "none"
 }
