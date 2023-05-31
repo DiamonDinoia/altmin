@@ -8,6 +8,7 @@
 #include <nanobind/stl/string.h>
 #include <torch/torch.h>
 
+#include <cmath>
 #include <iostream>
 #include <vector>
 
@@ -158,7 +159,8 @@ void test_autograd(
 // gradient which we use torch to calc
 std::vector<torch::Tensor> adam(torch::Tensor m_t_minus_1,
                                 torch::Tensor v_t_minus_1, torch::Tensor val,
-                                torch::Tensor grad, float lr, bool init_vals) {
+                                torch::Tensor grad, float lr, bool init_vals,
+                                int step) {
     float beta_1 = 0.9;
     float beta_2 = 0.999;
     float eps    = 1e-08;
@@ -175,14 +177,17 @@ std::vector<torch::Tensor> adam(torch::Tensor m_t_minus_1,
         v_t = beta_2 * v_t_minus_1 + (1 - beta_2) * (grad.pow(2));
     }
 
-    torch::Tensor m_t_correct = m_t / (1 - beta_1);
-    torch::Tensor v_t_correct = v_t / (1 - beta_2);
+    torch::Tensor m_t_correct =
+        m_t / (1.0 - std::pow(beta_1, static_cast<double>(step)));
+    torch::Tensor v_t_correct =
+        v_t / (1.0 - std::pow(beta_2, static_cast<double>(step)));
 
     torch::Tensor res =
         val - lr * (m_t_correct / (torch::sqrt(v_t_correct) + eps));
 
     // I think there will be a better way to return the vals so I'll look at
     // this.
+
     std::vector<torch::Tensor> result_vec;
     result_vec.push_back(m_t);
     result_vec.push_back(v_t);
@@ -201,7 +206,8 @@ void test_adam(
     nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
          grad,
     bool init_vals) {
-    // From blob exposes the given data as a Tensor without taking ownership of
+    // From blob exposes the given data as a Tensor without taking ownership
+
     // the original data
     torch::Tensor m_t_minus_1_tensor = torch::from_blob(
         m_t_minus_1.data(), {m_t_minus_1.shape(0), m_t_minus_1.shape(1)});
@@ -214,7 +220,7 @@ void test_adam(
 
     std::vector<torch::Tensor> res =
         adam(m_t_minus_1_tensor, v_t_minus_1_tensor, val_tensor, grad_tensor,
-             0.008, init_vals);
+             0.008, init_vals, 1);
 
     m_t_minus_1_tensor = res[0];
     v_t_minus_1_tensor = res[1];
@@ -277,13 +283,8 @@ void update_codes(
     nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
         codes,
     nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
-        targets,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
-        codes_m,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
-           codes_v,
-    size_t criterion, size_t n_iter, size_t last_layer, float lr,
-    bool init_vals) {
+           targets,
+    size_t criterion, size_t n_iter, size_t last_layer, float lr) {
     nanobind::gil_scoped_release no_gil;
 
     // From blob exposes the given data as a Tensor without taking ownership of
@@ -312,12 +313,6 @@ void update_codes(
 
     torch::Tensor codes_initial =
         code_tensor.detach().clone().requires_grad_(true);
-
-    torch::Tensor code_tensor_m = torch::from_blob(
-        codes_m.data(), {codes_m.shape(0), codes_m.shape(1)}, torch::kFloat64);
-
-    torch::Tensor code_tensor_v = torch::from_blob(
-        codes_v.data(), {codes_v.shape(0), codes_v.shape(1)}, torch::kFloat64);
 
     // Repeat bias tensor to make it equal to batch size
     // Needs to be a seperate tensor as I pass the 1d bias tensor to adam to be
@@ -365,24 +360,12 @@ void update_codes(
 
         loss.backward();
 
-        // Update the codes
-        std::vector<torch::Tensor> res =
-            adam(code_tensor_m, code_tensor_v, code_tensor, in_tensor.grad(),
-                 lr, init_vals);
-
-        // Have to do assignment like this so its an inplace operation and thus
-        // the changes are reflected in the underlying python data As from_blob
-        // just creates a view of this data so as long as the changes are in
-        // place the python data is changed
-        code_tensor_m -= (code_tensor_m - res[0]);
-        code_tensor_v -= (code_tensor_v - res[1]);
-
+        float momentum = 0.9;
+        float lr       = 0.3;
         {
             torch::NoGradGuard no_grad;
-            code_tensor -= (code_tensor - res[2].detach());
+            code_tensor.add_(-in_tensor.grad(), (1.0 + momentum) * lr);
         }
-
-        init_vals = false;
     }
 }
 
@@ -402,7 +385,7 @@ void update_last_layer(
                                                                      weight_v,
     nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias_m,
     nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias_v,
-    size_t criterion, size_t n_iter, float lr, bool init_vals) {
+    size_t criterion, size_t n_iter, float lr, bool init_vals, int step) {
     nanobind::gil_scoped_release no_gil;
 
     torch::Tensor                bias_tensor =
@@ -439,7 +422,7 @@ void update_last_layer(
         torch::from_blob(bias_v.data(), {bias_v.shape(0)}, torch::kFloat64);
 
     torch::Tensor bias_tensor_repeat;
-    for (size_t x = 0; x < n_iter; x++) {
+    for (int x = 0; x < n_iter; x++) {
         // std::cout << bias_tensor << std::endl;
         bias_tensor_repeat =
             bias_tensor.repeat({inputs.shape(0), 1}).requires_grad_(true);
@@ -464,7 +447,7 @@ void update_last_layer(
 
         std::vector<torch::Tensor> res =
             adam(weight_tensor_m, weight_tensor_v, weight_tensor,
-                 weight_tensor.grad(), lr, init_vals);
+                 weight_tensor.grad(), lr, init_vals, (step + x + 1));
 
         weight_tensor_m -= (weight_tensor_m - res[0]);
         weight_tensor_v -= (weight_tensor_v - res[1]);
@@ -479,7 +462,7 @@ void update_last_layer(
             adam(bias_tensor_m, bias_tensor_v, bias_tensor,
                  torch::reshape(torch::sum(bias_tensor_repeat.grad(), 0, true),
                                 {bias.shape(0)}),
-                 lr, init_vals);
+                 lr, init_vals, (step + x + 1));
 
         bias_tensor_m -= (bias_tensor_m - res[0]);
         bias_tensor_v -= (bias_tensor_v - res[1]);
@@ -513,7 +496,7 @@ void update_hidden_weights(
                                                                      weight_v,
     nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias_m,
     nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias_v,
-    size_t n_iter, float lr, bool init_vals) {
+    size_t n_iter, float lr, bool init_vals, int step) {
     nanobind::gil_scoped_release no_gil;
 
     torch::Tensor                bias_tensor =
@@ -583,7 +566,7 @@ void update_hidden_weights(
 
         std::vector<torch::Tensor> res =
             adam(weight_tensor_m, weight_tensor_v, weight_tensor,
-                 weight_tensor.grad(), lr, init_vals);
+                 weight_tensor.grad(), lr, init_vals, (step + x + 1));
 
         weight_tensor_m -= (weight_tensor_m - res[0]);
         weight_tensor_v -= (weight_tensor_v - res[1]);
@@ -602,7 +585,7 @@ void update_hidden_weights(
             adam(bias_tensor_m, bias_tensor_v, bias_tensor,
                  torch::reshape(torch::sum(bias_tensor_repeat.grad(), 0, true),
                                 {bias.shape(0)}),
-                 lr, init_vals);
+                 lr, init_vals, (step + x + 1));
 
         bias_tensor_m -= (bias_tensor_m - res[0]);
         bias_tensor_v -= (bias_tensor_v - res[1]);

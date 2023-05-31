@@ -5,18 +5,28 @@ import torch
 import nanobind
 import unittest
 import math
-from altmin import get_mods, get_codes
+from altmin import get_mods, get_codes, update_codes, update_last_layer_, update_hidden_weights_adam_, store_momentums, simpleNN
 
 from torch.optim.lr_scheduler import LambdaLR
 import torch.optim as optim
 from control_flow import cf_get_codes, cf_update_codes, cf_update_hidden_weights, cf_update_last_layer
 
-from models import simpleNN
 from basic_altmin import update_last_layer_cpp, update_codes_cpp, update_hidden_weights_cpp
-from manual_altmin import update_last_layer_manual, store_momentums, update_hidden_weights_adam_manual, update_codes_manual
-
+#from manual_altmin import update_last_layer_manual, store_momentums, update_hidden_weights_adam_manual, update_codes_manual
+import pickle
 import sys
 
+# Assert all values are the same to tolerance of ulp
+def check_equal(first_imp, second_imp, eps):
+    for x in range(len(first_imp)):
+        for y in range(len(first_imp[x])):
+            assert(abs(first_imp[x][y] - second_imp[x]
+                        [y]) <= sys.float_info.epsilon*eps)
+            
+def check_equal_bias(first_imp, second_imp,eps):
+    for x in range(len(first_imp)):
+        assert(abs(first_imp[x] - second_imp[x]) <= sys.float_info.epsilon*eps)
+                
 class TestHelloWorldOut(unittest.TestCase):
     # This test basically just checks nanobind is still working in it's simplest form
     def test_output_from_cpp(self):
@@ -157,13 +167,12 @@ class TestDerivatives(unittest.TestCase):
 
 # Test that the forward pass using cpp gives same res as forward pass using altmin
 class TestGetCodes(unittest.TestCase):
-    # Assert all values are the same to tolerance of ulp
     def check_equal(self, cpp_imp, python_imp):
         for x in range(len(cpp_imp)):
             for y in range(len(cpp_imp[x])):
                 assert(abs(cpp_imp[x][y] - python_imp[x]
                            [y]) <= sys.float_info.epsilon)
-
+                
     def test_get_codes(self):
         model = simpleNN(2, [4, 3], 1)
         model = get_mods(model)
@@ -184,169 +193,120 @@ class TestGetCodes(unittest.TestCase):
 
 #Test python and cpp update the codes the same
 class TestUpdateCodes(unittest.TestCase):
-    # Assert all values are the same to arund 6 d.p
-    # Again this can be improved as its only a problem for the momentums but I will look at this
-    def check_equal(self, cpp_imp, python_imp):
-        for x in range(len(cpp_imp)):
-            for y in range(len(cpp_imp[x])):
-                assert(abs(cpp_imp[x][y] - python_imp[x]
-                           [y]) <= sys.float_info.epsilon*10e12)
-
-    
     def test_update_codes(self):
-        model = simpleNN(2, [4, 3], 1)
-        model = get_mods(model)
-        # Ignore Flatten for now
-        model = model[1:]
-        in_tensor = torch.rand(5, 2, dtype=torch.double)
+        # Setup 
         targets = torch.round(torch.rand(5, 1, dtype=torch.double))
-        n_iter = 5
         code_one = torch.rand(5,4, dtype=torch.double)
         code_two = torch.rand(5,3, dtype=torch.double)
-
-        code_one_python = code_one.detach().clone()
-        code_two_python = code_two.detach().clone()
-        codes = [code_one, code_two]
-        
-        import pickle
-        model_python = pickle.loads(pickle.dumps(model))
-
-        #cpp
+        codes_cpp = [code_one, code_two]
+        codes_python = [code_one.detach().clone(), code_two.detach().clone()]
+        n_iter = 1
         lr = 0.3
-        momentum_dict_cpp = store_momentums(model, True)
+        mu = 0.003
+
+        # Model setup
+        model_cpp = simpleNN(2, [4,3],1)
+        model_python = pickle.loads(pickle.dumps(model_cpp))
+
+        # cpp
+        model_cpp = get_mods(model_cpp)
+        model_cpp = model_cpp[1:]
+        cf_update_codes(codes_cpp, model_cpp, targets.detach(), nn.BCELoss(), mu=mu, lambda_c=0.0, n_iter=n_iter, lr=lr )
+        cf_update_codes(codes_cpp, model_cpp, targets.detach(), nn.BCELoss(), mu=mu, lambda_c=0.0, n_iter=n_iter, lr=lr )
+
+        # python
+        model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler= lambda epoch: 1/2**(epoch//8))
+        model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model_python = model_python[1:]
+        update_codes(codes_python, model_python, targets, nn.BCELoss(), mu, 0, n_iter, lr)
+        update_codes(codes_python, model_python, targets, nn.BCELoss(), mu, 0, n_iter, lr)
         
-        #Very hacky but tmp fix
-        #Need to init the code to size based on the code tensors
-        #But size of code depends on the batch size so have to change these after intialising the dict
-        #I will improve this later this is just for testing purposes
-        x = 0
-        y = 0
-        for key in momentum_dict_cpp:
-            if "code" in key:
-                momentum_dict_cpp[key] = torch.zeros(codes[x].shape, dtype=torch.double)
-                y+=1 
-                if y==2:
-                    x+=1
+        # Assert python and cpp give the same codes
+        for x in range(len(codes_cpp)):
+            check_equal(codes_python[x], codes_cpp[x], 10e12)
 
-        init_vals = True
-        cf_update_codes(codes, model, targets.detach(), nn.BCELoss(), momentum_dict_cpp, init_vals, mu=0.003, lambda_c=0.0, n_iter=n_iter, lr=0.3 )
-   
-        #python
-        momentum_dict = store_momentums(model_python, False)
-        codes_python = [code_one_python, code_two_python]
-        update_codes_manual(codes_python, model_python, targets.detach(), nn.BCELoss(), 0.003, 0, n_iter, momentum_dict)
-       
-        #Assert python and cpp give the same codes
-        for x in range(len(codes)):
-            self.check_equal(codes_python[x], codes[x])
-
-        #Assert python and cpp give the same momentums
-        self.check_equal(momentum_dict["0.code_m"], momentum_dict_cpp["0.code_m"])
-        self.check_equal(momentum_dict["0.code_v"], momentum_dict_cpp["0.code_v"])
-
-        #These ones are acc to about 6 d.p which is enough but should be investigated later
-        self.check_equal(momentum_dict["2.code_m"], momentum_dict_cpp["2.code_m"])
-        self.check_equal(momentum_dict["2.code_v"], momentum_dict_cpp["2.code_v"])
                 
             
 #Test cpp and python update the hidden weights the same
 class TestUpdateHiddenWeights(unittest.TestCase):
-    # Assert all values are the same to tolerance of ulp
-    def check_equal(self, cpp_imp, python_imp):
-        for x in range(len(cpp_imp)):
-            for y in range(len(cpp_imp[x])):
-                assert(abs(cpp_imp[x][y] - python_imp[x]
-                           [y]) <= sys.float_info.epsilon*10e08)
-                
-    def check_equal_bias(self, cpp_imp, python_imp):
-        for x in range(len(cpp_imp)):
-            assert(abs(cpp_imp[x] - python_imp[x]) <= sys.float_info.epsilon*10e08)
-
     def test_update_hidden_weights(self):
-        model = simpleNN(2, [4, 3], 1)
-        model = get_mods(model)
-        # Ignore Flatten for now
-        model = model[1:]
+        # Setup
         in_tensor = torch.rand(5, 2, dtype=torch.double)
-        
-        n_iter = 1
         codes = [torch.rand(5,4, dtype=torch.double).detach(), torch.rand(5,3, dtype=torch.double).detach()]
-        
-        import pickle
-        model_python = pickle.loads(pickle.dumps(model))
-
-        #cpp
+        n_iter = 1
         lr = 0.008 
-        momentum_dict_cpp = store_momentums(model, True)
-        init_vals = True
-        cf_update_hidden_weights(model, in_tensor.detach(), codes, 0,n_iter, lr, momentum_dict_cpp, init_vals)
-        
-        #python
-        momentum_dict = store_momentums(model_python, False)
-        update_hidden_weights_adam_manual(model_python, in_tensor.detach(), codes, 0, n_iter, momentum_dict)
-        
-        for x,m in enumerate(model):
+
+        # Model setup
+        model_cpp = simpleNN(2, [4,3],1)
+        model_python = pickle.loads(pickle.dumps(model_cpp))
+
+        # cpp
+        model_cpp = get_mods(model_cpp)
+        model_cpp = model_cpp[1:]
+        momentum_dict_cpp = store_momentums(model_cpp, init_vals = True)
+        # Run twice to test parameters returned correctly after first execution
+        cf_update_hidden_weights(model_cpp, in_tensor.detach(), codes, 0,n_iter, lr, momentum_dict_cpp, True)
+        cf_update_hidden_weights(model_cpp, in_tensor.detach(), codes, 0,n_iter, lr, momentum_dict_cpp, False)
+
+        # Python
+        model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model_python = model_python[1:]
+        #Run twice to test parameters returned correctly after first execution
+        update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
+        update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
+                 
+        for x,m in enumerate(model_cpp):
             if isinstance(m, nn.Linear):
                 #Assert model params are updated the same
-                self.check_equal(model_python[x].weight.data, model[x].weight.data)
-                self.check_equal_bias(model_python[x].bias.data, model[x].bias.data)
-                #Assert momentums are updated the same
-                self.check_equal(momentum_dict[str(x)+".weight_m"], momentum_dict_cpp[str(x)+".weight_m"])
-                self.check_equal(momentum_dict[str(x)+".weight_v"], momentum_dict_cpp[str(x)+".weight_v"])
-                
-                self.check_equal_bias(momentum_dict[str(x)+".bias_m"], momentum_dict_cpp[str(x)+".bias_m"])
-                self.check_equal_bias(momentum_dict[str(x)+".bias_v"], momentum_dict_cpp[str(x)+".bias_v"])
+                check_equal(model_python[x].weight.data, model_cpp[x].weight.data, 10e8)
+                check_equal_bias(model_python[x].bias.data, model_cpp[x].bias.data, 10e8)
+    
+
+
 
 #Test cpp and python update the last layer the same
 class TestUpdateLastLayer(unittest.TestCase):
-
-    # Assert all values are the same to tolerance of ulp
-    def check_equal(self, cpp_imp, python_imp):
-        for x in range(len(cpp_imp)):
-            for y in range(len(cpp_imp[x])):
-                assert(abs(cpp_imp[x][y] - python_imp[x]
-                           [y]) <= sys.float_info.epsilon*10e08)
-                
-    def check_equal_bias(self, cpp_imp, python_imp):
-        for x in range(len(cpp_imp)):
-            assert(abs(cpp_imp[x] - python_imp[x]) <= sys.float_info.epsilon*10e08)
-                
     #Check updating last layer with adam gives same res in python and cpp
     def test_update_last_layer(self):
-        model = simpleNN(2, [4,5],1)
-        model = get_mods(model)
-        model = model[1:]
+        # Setup
         in_tensor = torch.rand(10,5, dtype = torch.double)
         targets = torch.round(torch.rand(10, 1, dtype=torch.double))
         n_iter = 5
-
-        import pickle
-        model_python = pickle.loads(pickle.dumps(model))
-
-        
-        #cpp
-        momentum_dict_cpp = store_momentums(model, True)
-        criterion_cpp = 0
         lr = 0.008
-        init_vals = True
-        cf_update_last_layer(model, in_tensor.detach(), targets.detach(), criterion_cpp, n_iter, lr, momentum_dict_cpp, init_vals )
 
-        #python
-        momentum_dict = store_momentums(model_python, False)
-        update_last_layer_manual(model_python[-1], in_tensor.detach(), targets.detach(), nn.BCELoss(), n_iter, momentum_dict)
+        # Model setup
+        model_cpp = simpleNN(2, [4,5],1)
+        model_python = pickle.loads(pickle.dumps(model_cpp))
+
+        # cpp
+        model_cpp = get_mods(model_cpp)
+        model_cpp = model_cpp[1:]
+        momentum_dict_cpp = store_momentums(model_cpp, init_vals = True)
+        criterion_cpp = 0
+        # Run twice to test parameters returned correctly after first execution
+        cf_update_last_layer(model_cpp, in_tensor.detach(), targets.detach(), criterion_cpp, n_iter, lr, momentum_dict_cpp, True )
+        cf_update_last_layer(model_cpp, in_tensor.detach(), targets.detach(), criterion_cpp, n_iter, lr, momentum_dict_cpp, False )
+
+        # Python
+        model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model_python = model_python[1:]
+        # Run twice to test parameters returned correctly after first execution
+        update_last_layer_(model_python[-1], in_tensor, targets, nn.BCELoss(), n_iter)
+        update_last_layer_(model_python[-1], in_tensor, targets, nn.BCELoss(), n_iter)
+        
 
         #Assert model params are updated the same
-        self.check_equal(model_python[-1][1].weight.data, model[-1][1].weight.data)
-        self.check_equal_bias(model_python[-1][1].bias.data, model[-1][1].bias.data)
+        check_equal(model_python[-1][1].weight.data, model_cpp[-1][1].weight.data, 10e8)
+        check_equal_bias(model_python[-1][1].bias.data, model_cpp[-1][1].bias.data, 10e8)
+        
 
-        #Assert momentums are updated the same
-        self.check_equal(momentum_dict["-1.weight_m"], momentum_dict_cpp["-1.weight_m"])
-        self.check_equal(momentum_dict["-1.weight_v"], momentum_dict_cpp["-1.weight_v"])
         
-        self.check_equal_bias(momentum_dict["-1.bias_m"], momentum_dict_cpp["-1.bias_m"])
-        self.check_equal_bias(momentum_dict["-1.bias_v"], momentum_dict_cpp["-1.bias_v"])
-        
-#Need to add proper tests to this 
+# #Need to add proper tests to this 
 class TestAdam(unittest.TestCase):
     
     def test_not_init(self):

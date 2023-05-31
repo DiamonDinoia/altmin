@@ -81,7 +81,7 @@ def conv_mods(nmod, lin):
         mods.append(1)
     return mods
 
-def cf_update_codes(codes, model_mods, targets, criterion, momentum_dict, init_vals, mu=0.003, lambda_c=0.0, n_iter=5, lr=0.3):
+def cf_update_codes(codes, model_mods, targets, criterion,  mu=0.003, lambda_c=0.0, n_iter=5, lr=0.3):
 
     id_codes = [i for i, m in enumerate(model_mods) if hasattr(
         m, 'has_codes') and getattr(m, 'has_codes')]
@@ -118,11 +118,9 @@ def cf_update_codes(codes, model_mods, targets, criterion, momentum_dict, init_v
         #I think targets and next codes can be merged into one var
         lr = 0.3
         if isinstance(lin, nn.Linear):
-            nanobind.update_codes(lin.weight.data, lin.bias.data, mods, codes[-l], targets, momentum_dict[str(idx)+".code_m"], momentum_dict[str(idx)+".code_v"],
-                                  criterion, n_iter, last_layer, lr, init_vals   )
+            nanobind.update_codes(lin.weight.data, lin.bias.data, mods, codes[-l], targets, criterion, n_iter, last_layer, lr    )
         else:
-            nanobind.update_codes(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, momentum_dict[str(idx)+".code_m"], momentum_dict[str(idx)+".code_v"],
-                                   criterion, n_iter, last_layer, lr, init_vals  )
+            nanobind.update_codes(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, criterion, n_iter, last_layer, lr )
 
     return codes
 
@@ -146,7 +144,9 @@ def cf_update_hidden_weights(model_mods, inputs, codes, lambda_w, n_iter, lr, mo
         mods = conv_mods(nmod, lin)
        
         nanobind.update_hidden_weights(lin.weight.data, lin.bias.data, mods, c_in, c_out, momentum_dict[str(idx)+".weight_m"], momentum_dict[str(idx)+".weight_v"],
-                                        momentum_dict[str(idx)+".bias_m"], momentum_dict[str(idx)+".bias_v"], n_iter, lr, init_vals )
+                                        momentum_dict[str(idx)+".bias_m"], momentum_dict[str(idx)+".bias_v"], n_iter, lr, init_vals, 
+                                        momentum_dict[str(idx)+".layer_step"])
+        momentum_dict[str(idx)+".layer_step"] += n_iter
 
         
 def cf_update_last_layer(model, inputs, targets, criterion, n_iter, lr, momentum_dict, init_vals ):
@@ -154,7 +154,9 @@ def cf_update_last_layer(model, inputs, targets, criterion, n_iter, lr, momentum
     #conv_mods is set up stupidly
     nanobind.update_last_layer(model[-1][1].weight.data,model[-1][1].bias.data, conv_mods(model[-1],-1), inputs.detach(), targets, 
                                            momentum_dict["-1.weight_m"], momentum_dict["-1.weight_v"], momentum_dict["-1.bias_m"], 
-                                           momentum_dict["-1.bias_v"], criterion, n_iter, lr, init_vals )
+                                           momentum_dict["-1.bias_v"], criterion, n_iter, lr, init_vals, momentum_dict["-1.layer_step"] )
+    momentum_dict["-1.layer_step"] += n_iter
+    
 
 
 

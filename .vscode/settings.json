@@ -92,7 +92,10 @@
         "*.expression": "cpp",
         "csignal": "cpp",
         "forward_list": "cpp",
-        "shared_mutex": "cpp"
+        "shared_mutex": "cpp",
+        "format": "cpp",
+        "any": "cpp",
+        "span": "cpp"
     },
     "editor.formatOnSave": true,
     "clang-format.executable": "/usr/bin/clang-format-15"

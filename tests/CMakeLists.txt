@@ -31,19 +31,42 @@ CPMAddPackage(
 # also if you only need a subset of the files in the repo, you can specify them here 
 # and download/intstall only those files
 install(DIRECTORY ${altmin_SOURCE_DIR}/ DESTINATION ${CMAKE_SOURCE_DIR}/artifacts/altmin)
-install(FILES ${CMAKE_SOURCE_DIR}/src/models.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 install(FILES ${CMAKE_SOURCE_DIR}/src/control_flow.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
-install(FILES ${CMAKE_SOURCE_DIR}/tests/tests.py DESTINATION ${CMAKE_SOURCE_DIR}/tests )
-install(FILES ${CMAKE_SOURCE_DIR}/src/run_altmin_sgd.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
-install(FILES ${CMAKE_SOURCE_DIR}/src/basic_altmin.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
-install(FILES ${CMAKE_SOURCE_DIR}/src/helper_methods.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
-install(FILES ${CMAKE_SOURCE_DIR}/src/train_model.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
-install(FILES ${CMAKE_SOURCE_DIR}/src/dataset.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
-install(FILES ${CMAKE_SOURCE_DIR}/src/manual_altmin.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
+install(FILES ${CMAKE_SOURCE_DIR}/tests/tests.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
 
+CPMAddPackage(
+        NAME ugrad
+        GIT_REPOSITORY https://github.com/elinx/ugrad
+        GIT_TAG master
+        EXCLUDE_FROM_ALL YES
+        GIT_SHALLOW YES
+        DOWNLOAD_ONLY YES
+)
 
+CPMAddPackage(
+        NAME autodiff
+        GIT_REPOSITORY https://github.com/autodiff/autodiff
+        GIT_TAG v1.0.2
+        EXCLUDE_FROM_ALL YES
+        GIT_SHALLOW YES
+        DOWNLOAD_ONLY YES
+)
+
+#find_package(Adept-2 REQUIRED)
+
+if(autodiff_ADDED)
+  add_library(autodiff INTERFACE IMPORTED)
+  target_include_directories(autodiff INTERFACE ${autodiff_SOURCE_DIR})
+endif()
+
+target_link_libraries(autodiff INTERFACE Eigen)
 
 add_executable(eigen-test eigen-performance.cpp)
-target_link_libraries(eigen-test PRIVATE Eigen)
+target_link_libraries(eigen-test PRIVATE Eigen )
 target_add_compilation_flags(eigen-test)
-install(FILES ${CMAKE_SOURCE_DIR}/tests/tests.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts )
+
+
+add_executable(autodiff-test autodiff_performance.cpp)
+target_link_libraries(autodiff-test PRIVATE "${TORCH_LIBRARIES}" autodiff )
+
+target_include_directories(autodiff-test PRIVATE ${CMAKE_SOURCE_DIR}/include)
