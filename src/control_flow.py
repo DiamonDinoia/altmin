@@ -6,8 +6,9 @@ import torch.optim as optim
 import nanobind
 import unittest
 
-from altmin import get_mods, get_codes
-from models import simpleNN
+import os, sys 
+sys.path.insert(0, os.path.abspath("../artifacts"))
+from altmin import simpleNN
 
 
 def select_func(m, x, tmp, i):

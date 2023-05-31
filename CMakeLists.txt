@@ -133,7 +133,7 @@ CPMAddPackage(
         SYSTEM YES
 )
 
-
+list(APPEND CMAKE_PREFIX_PATH "libtorch")
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
@@ -142,7 +142,7 @@ target_include_directories(nanobind PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(nanobind PRIVATE Eigen gsl "${TORCH_LIBRARIES}")
 install(TARGETS nanobind DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
-list(APPEND CMAKE_PREFIX_PATH "libtorch")
+
 
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)

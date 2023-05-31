@@ -2,19 +2,22 @@ import torch.nn as nn
 import numpy as np
 import torch
 
-import nanobind
+
 import unittest
 import math
-from altmin import get_mods, get_codes, update_codes, update_last_layer_, update_hidden_weights_adam_, store_momentums, simpleNN
+
 
 from torch.optim.lr_scheduler import LambdaLR
 import torch.optim as optim
-from control_flow import cf_get_codes, cf_update_codes, cf_update_hidden_weights, cf_update_last_layer
 
-from basic_altmin import update_last_layer_cpp, update_codes_cpp, update_hidden_weights_cpp
+
 #from manual_altmin import update_last_layer_manual, store_momentums, update_hidden_weights_adam_manual, update_codes_manual
 import pickle
-import sys
+import os, sys 
+sys.path.insert(0, os.path.abspath("../artifacts"))
+from control_flow import cf_get_codes, cf_update_codes, cf_update_hidden_weights, cf_update_last_layer
+from altmin import get_mods, get_codes, update_codes, update_last_layer_, update_hidden_weights_adam_, store_momentums, simpleNN
+import nanobind
 
 # Assert all values are the same to tolerance of ulp
 def check_equal(first_imp, second_imp, eps):
