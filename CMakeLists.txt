@@ -133,17 +133,32 @@ CPMAddPackage(
         SYSTEM YES
 )
 
+# if(${CMAKE_VERSION} VERSION_LESS_EQUAL "3.13.4")
+#     cuda_select_nvcc_arch_flags(ARCH_FLAGS "Auto") # optional argument for arch to add
+#     message("ARCH_FLAGS = ${ARCH_FLAGS}")
+#     string(REPLACE "-gencode;" "--generate-code=" ARCH_FLAGS "${ARCH_FLAGS}")
+#     string(APPEND CMAKE_CUDA_FLAGS "${ARCH_FLAGS}")
+# else()
+#     include(FindCUDA/select_compute_arch)
+#     CUDA_DETECT_INSTALLED_GPUS(INSTALLED_GPU_CCS_1)
+#     string(STRIP "${INSTALLED_GPU_CCS_1}" INSTALLED_GPU_CCS_2)
+#     string(REPLACE " " ";" INSTALLED_GPU_CCS_3 "${INSTALLED_GPU_CCS_2}")
+#     string(REPLACE "." "" CUDA_ARCH_LIST "${INSTALLED_GPU_CCS_3}")
+#     SET(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH_LIST})
+#     set_property(GLOBAL PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH_LIST}")
+# endif()
+
+set(CMAKE_CUDA_ARCHITECTURES native)
+
 execute_process(COMMAND python -c "import torch;print(torch.utils.cmake_prefix_path)"
     OUTPUT_VARIABLE TORCH_CMAKE_PREFIX_PATH)
 string(REGEX REPLACE "\n$" "" TORCH_CMAKE_PREFIX_PATH "${TORCH_CMAKE_PREFIX_PATH}")
 set(Torch_DIR ${TORCH_CMAKE_PREFIX_PATH}/Torch)
 
-# list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PREFIX_PATH})
 message(STATUS "Torch_DIR ${Torch_DIR}")
-message(STATUS "CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH}")
 
 find_package(Torch REQUIRED)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 nanobind_add_module(nanobind src/nanobind.cpp)
 target_include_directories(nanobind PRIVATE ${CMAKE_SOURCE_DIR}/include)
