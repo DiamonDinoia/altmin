@@ -1,4 +1,4 @@
-#include "nanobind.hpp"
+#include "fast_altmin.hpp"
 
 #include <gsl/gsl_multimin.h>
 #include <nanobind/eigen/dense.h>
@@ -28,8 +28,20 @@ int         hello_world_in(const std::string &av) {
 // Matrix functions used to test eigen and nanobind
 // At the moment the code uses torch instead of eigen but I'm keeping these for
 // now as I would be good to transition back to eigen
-void matrix_in(const nb::DRef<Eigen::MatrixXd> &x) {
+void matrix_in(const nanobind::DRef<Eigen::MatrixXd> &x) {
     std::cout << x << std::endl;
+}
+
+// Matrix functions used to test eigen and nanobind
+// At the moment the code uses torch instead of eigen but I'm keeping these for
+// now as I would be good to transition back to eigen
+void torch_in(nanobind::ndarray<nanobind::pytorch, float,
+                                nanobind::shape<nanobind::any, nanobind::any>>
+                  x) {
+    torch::Tensor input_tensor =
+        torch::from_blob(x.data(), {x.shape(0), x.shape(1)})
+            .requires_grad_(true);
+    std::cout << input_tensor << std::endl;
 }
 
 Eigen::MatrixXd matrix_out() {
@@ -41,8 +53,9 @@ Eigen::MatrixXd matrix_out() {
     return m;
 }
 
-Eigen::MatrixXd matrix_multiplication(const nb::DRef<Eigen::MatrixXd> &n,
-                                      const nb::DRef<Eigen::MatrixXd> &m) {
+Eigen::MatrixXd matrix_multiplication(
+    const nanobind::DRef<Eigen::MatrixXd> &n,
+    const nanobind::DRef<Eigen::MatrixXd> &m) {
     Eigen::MatrixXd x = n * m;
     return x;
 }
@@ -57,12 +70,16 @@ torch::Tensor tensor_lin(torch::Tensor input, torch::Tensor weight,
 
 // Function to allow for testing linear layer as all my testing is in python atm
 void test_tensor_lin(
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, float,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         inputs,
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
-                                                                    weight,
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any>> bias,
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, float,
+                      nanobind::shape<nanobind::any, nanobind::any>>
+        weight,
+    nanobind::ndarray<nanobind::pytorch, float, nanobind::shape<nanobind::any>>
+        bias,
+    nanobind::ndarray<nanobind::pytorch, float,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         result) {
     torch::Tensor bias_tensor = torch::from_blob(bias.data(), {bias.shape(0)})
                                     .repeat({inputs.shape(0), 1});
@@ -92,7 +109,8 @@ void test_tensor_lin(
 // Both functions below test autograd
 // So one is probably redundant so I'll remove it soon
 void autograd_example(
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, float,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         in_tensor) {
     nanobind::gil_scoped_release no_gil;
     torch::Tensor                x = torch::from_blob(in_tensor.data(),
@@ -122,12 +140,16 @@ void autograd_example(
 }
 
 void test_autograd(
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, float,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         inputs,
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
-                                                                    weight,
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any>> bias,
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, float,
+                      nanobind::shape<nanobind::any, nanobind::any>>
+        weight,
+    nanobind::ndarray<nanobind::pytorch, float, nanobind::shape<nanobind::any>>
+        bias,
+    nanobind::ndarray<nanobind::pytorch, float,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         targets) {
     nanobind::gil_scoped_release no_gil;
     torch::Tensor bias_tensor = torch::from_blob(bias.data(), {bias.shape(0)})
@@ -196,16 +218,19 @@ std::vector<torch::Tensor> adam(torch::Tensor m_t_minus_1,
 }
 
 // Used to test the adam implementation in cpp
-void test_adam(
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
-        m_t_minus_1,
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
-        v_t_minus_1,
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
-        val,
-    nanobind::ndarray<nanobind::pytorch, float, nb::shape<nb::any, nb::any>>
-         grad,
-    bool init_vals) {
+void test_adam(nanobind::ndarray<nanobind::pytorch, float,
+                                 nanobind::shape<nanobind::any, nanobind::any>>
+                   m_t_minus_1,
+               nanobind::ndarray<nanobind::pytorch, float,
+                                 nanobind::shape<nanobind::any, nanobind::any>>
+                   v_t_minus_1,
+               nanobind::ndarray<nanobind::pytorch, float,
+                                 nanobind::shape<nanobind::any, nanobind::any>>
+                   val,
+               nanobind::ndarray<nanobind::pytorch, float,
+                                 nanobind::shape<nanobind::any, nanobind::any>>
+                    grad,
+               bool init_vals) {
     // From blob exposes the given data as a Tensor without taking ownership
 
     // the original data
@@ -276,13 +301,17 @@ void test_adam(
 // if = -1 then do nothing
 // This implements the logic for updating the codes in cpp
 void update_codes(
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
-                                                                     weight,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias,
-    std::vector<int>                                                 mods,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
+        weight,
+    nanobind::ndarray<nanobind::pytorch, double, nanobind::shape<nanobind::any>>
+                     bias,
+    std::vector<int> mods,
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         codes,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
            targets,
     size_t criterion, size_t n_iter, size_t last_layer, float lr) {
     nanobind::gil_scoped_release no_gil;
@@ -371,20 +400,28 @@ void update_codes(
 
 // Implents the logic for upating the last layer in cpp
 void update_last_layer(
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
-                                                                     weight,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias,
-    std::vector<int>                                                 mods,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
+        weight,
+    nanobind::ndarray<nanobind::pytorch, double, nanobind::shape<nanobind::any>>
+                     bias,
+    std::vector<int> mods,
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         inputs,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         targets,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         weight_m,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
-                                                                     weight_v,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias_m,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias_v,
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
+        weight_v,
+    nanobind::ndarray<nanobind::pytorch, double, nanobind::shape<nanobind::any>>
+        bias_m,
+    nanobind::ndarray<nanobind::pytorch, double, nanobind::shape<nanobind::any>>
+           bias_v,
     size_t criterion, size_t n_iter, float lr, bool init_vals, int step) {
     nanobind::gil_scoped_release no_gil;
 
@@ -482,20 +519,28 @@ void update_last_layer(
 
 // Implements the logic for updating the hidden weights in cpp
 void update_hidden_weights(
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
-                                                                     weight,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias,
-    std::vector<int>                                                 mods,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
+        weight,
+    nanobind::ndarray<nanobind::pytorch, double, nanobind::shape<nanobind::any>>
+                     bias,
+    std::vector<int> mods,
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         codes_in,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         codes_out,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         weight_m,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
-                                                                     weight_v,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias_m,
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any>> bias_v,
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
+        weight_v,
+    nanobind::ndarray<nanobind::pytorch, double, nanobind::shape<nanobind::any>>
+        bias_m,
+    nanobind::ndarray<nanobind::pytorch, double, nanobind::shape<nanobind::any>>
+           bias_v,
     size_t n_iter, float lr, bool init_vals, int step) {
     nanobind::gil_scoped_release no_gil;
 
@@ -601,7 +646,8 @@ void update_hidden_weights(
 }
 
 void test_from_blob(
-    nanobind::ndarray<nanobind::pytorch, double, nb::shape<nb::any, nb::any>>
+    nanobind::ndarray<nanobind::pytorch, double,
+                      nanobind::shape<nanobind::any, nanobind::any>>
         in_data) {
     torch::Tensor in_tensor =
         torch::from_blob(in_data.data(), {in_data.shape(0), in_data.shape(1)},
@@ -623,7 +669,7 @@ void test_from_blob(
     std::cout << in_tensor << std::endl;
 }
 
-NB_MODULE(nanobind, m) {
+NB_MODULE(fast_altmin, m) {
     m.def("BCELoss", &BCELoss);
     m.def("MSELoss", &MSELoss);
     m.def("differentiate_ReLU", &differentiate_ReLU);
@@ -651,4 +697,5 @@ NB_MODULE(nanobind, m) {
     m.def("update_hidden_weights", &update_hidden_weights);
     m.def("test_adam", &test_adam);
     m.def("test_from_blob", &test_from_blob);
+    m.def("torch_in", &torch_in);
 }
