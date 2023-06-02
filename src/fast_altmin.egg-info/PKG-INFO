@@ -6,4 +6,4 @@ Home-page: https://github.com/DiamonDinoia/altmin
 Author: Tom Maguire
 Author-email: thomas.d.maguire@btinternet.com
 License: BSD
-Requires-Python: >=3.7
+Requires-Python: >=3.8

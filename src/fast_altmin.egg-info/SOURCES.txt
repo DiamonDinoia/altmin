@@ -1,16 +1,9 @@
 pyproject.toml
 setup.py
-_skbuild/linux-x86_64-3.10/cmake-install/src/fast_altmin/__init__.py
-_skbuild/linux-x86_64-3.10/cmake-install/src/fast_altmin/control_flow.py
-_skbuild/linux-x86_64-3.10/cmake-install/src/fast_altmin/fast_altmin.cpython-310-x86_64-linux-gnu.so
-_skbuild/linux-x86_64-3.8/cmake-install/src/fast_altmin/__init__.py
-_skbuild/linux-x86_64-3.8/cmake-install/src/fast_altmin/control_flow.py
-_skbuild/linux-x86_64-3.8/cmake-install/src/fast_altmin/fast_altmin.cpython-38-x86_64-linux-gnu.so
 src/fast_altmin/__init__.py
 src/fast_altmin/control_flow.py
 src/fast_altmin.egg-info/PKG-INFO
 src/fast_altmin.egg-info/SOURCES.txt
 src/fast_altmin.egg-info/dependency_links.txt
-src/fast_altmin.egg-info/not-zip-safe
 src/fast_altmin.egg-info/top_level.txt
 tests/tests.py
