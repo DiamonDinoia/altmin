@@ -138,21 +138,18 @@ execute_process(COMMAND python -c "import torch;print(torch.utils.cmake_prefix_p
 string(REGEX REPLACE "\n$" "" TORCH_CMAKE_PREFIX_PATH "${TORCH_CMAKE_PREFIX_PATH}")
 set(Torch_DIR ${TORCH_CMAKE_PREFIX_PATH}/Torch)
 
-# list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PREFIX_PATH})
 message(STATUS "Torch_DIR ${Torch_DIR}")
 message(STATUS "CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH}")
 
 find_package(Torch REQUIRED)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 nanobind_add_module(fast_altmin src/fast_altmin.cpp)
 target_include_directories(fast_altmin PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(fast_altmin PRIVATE Eigen gsl "${TORCH_LIBRARIES}")
 
-install(TARGETS fast_atlmin DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 set_target_properties(fast_altmin PROPERTIES CXX_STANDARD ${ALTMIN_CXX_STANDARD})
 
-
+install(TARGETS fast_altmin LIBRARY DESTINATION fast_altmin)
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)
 endif()

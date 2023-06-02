@@ -4,7 +4,9 @@ In artifacts folder run: python train_model --strategy altmin --cpp 1
 
 Need to download the delphes TTbarFull train set
 
-Also need libtorch downloaded locally atm but this is a priority to fix.
+To install:
+    pip install torch==2.0.1+cpu --index-url https://download.pytorch.org/whl/cpu
+    pip install . --extra-index-url https://download.pytorch.org/whl/cpu
 
 N.b:
 

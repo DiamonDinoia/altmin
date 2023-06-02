@@ -4,8 +4,8 @@ try:
     from skbuild import setup
     import nanobind
     import torch
-    
-    
+
+
 except ImportError:
     print("The preferred way to invoke 'setup.py' is via pip, as in 'pip "
           "install .'. If you wish to run the setup script directly, you must "
