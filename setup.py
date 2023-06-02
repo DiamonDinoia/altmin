@@ -2,8 +2,9 @@ import sys
 
 try:
     from skbuild import setup
-    import torch
     import nanobind
+    import torch
+    
     
 except ImportError:
     print("The preferred way to invoke 'setup.py' is via pip, as in 'pip "
@@ -24,5 +25,5 @@ setup(
     package_dir={'': 'src'},
     cmake_install_dir="src/fast_altmin",
     include_package_data=True,
-    python_requires=">=3.7"
+    python_requires=">=3.8"
 )

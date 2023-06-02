@@ -13,9 +13,8 @@ if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_BINARY_DIR})
   message(FATAL_ERROR "in-source build detected")
 endif()
 
+project(atlmin LANGUAGES CXX)
 cmake_minimum_required(VERSION 3.18...3.26)
-project(fast_altmin LANGUAGES CXX)
-
 find_package(Python 3.7 COMPONENTS Interpreter Development.Module REQUIRED)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -76,7 +75,7 @@ endfunction()
 set(CPM_DOWNLOAD_VERSION 0.38.1)
 set(EIGEN_DOWNLOAD_VERSION 3.4.0)
 set(NANOBIND_DOWNLOAD_VERSION v1.1.1)
-#set(CATCH2_DOWNLOAD_VERSION v3.3.2)
+set(CATCH2_DOWNLOAD_VERSION v3.3.2)
 
 option(ALTMIN_BUILD_TESTS "Build tests" ON)
 
@@ -134,22 +133,24 @@ CPMAddPackage(
         SYSTEM YES
 )
 
+execute_process(COMMAND python -c "import torch;print(torch.utils.cmake_prefix_path)"
+    OUTPUT_VARIABLE TORCH_CMAKE_PREFIX_PATH)
+string(REGEX REPLACE "\n$" "" TORCH_CMAKE_PREFIX_PATH "${TORCH_CMAKE_PREFIX_PATH}")
+set(Torch_DIR ${TORCH_CMAKE_PREFIX_PATH}/Torch)
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
-# Atm have libtorch in github so downloaded as part of package instead of only wokring with cuda
-# And ideally torch is removed anyway so not worth spending time on rn.
-list(APPEND CMAKE_PREFIX_PATH "libtorch")
+# list(APPEND CMAKE_PREFIX_PATH ${TORCH_CMAKE_PREFIX_PATH})
+message(STATUS "Torch_DIR ${Torch_DIR}")
+message(STATUS "CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH}")
+
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 nanobind_add_module(fast_altmin src/fast_altmin.cpp)
-
-
-
 target_include_directories(fast_altmin PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(fast_altmin PRIVATE Eigen gsl "${TORCH_LIBRARIES}")
 
-install(TARGETS fast_altmin LIBRARY DESTINATION .)
+install(TARGETS fast_atlmin DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
+set_target_properties(fast_altmin PROPERTIES CXX_STANDARD ${ALTMIN_CXX_STANDARD})
 
 
 if(ALTMIN_BUILD_TESTS)
