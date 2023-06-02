@@ -4,8 +4,8 @@ requires = [
     "wheel",
     "scikit-build>=0.16.7",
     "cmake>=3.18",
+    "torch==2.0.0",
     "nanobind>=1.1.0",
-    "torch>=1.7.0",
     "ninja; platform_system!='Windows'"
 ]
 
