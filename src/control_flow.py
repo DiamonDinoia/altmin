@@ -3,46 +3,12 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-import fast_altmin
+import nanobind
 import unittest
 
 import os, sys 
 sys.path.insert(0, os.path.abspath("../artifacts"))
-
-
-def store_momentums(model, init_vals):
-   
-    momentum_dict = {}
-    for i,m in enumerate(model):
-        if hasattr(m, 'has_codes') and getattr(m, 'has_codes'):
-            momentum_dict[str(i)+".weight_m"] = torch.zeros(m.weight.shape, dtype=torch.double)
-            momentum_dict[str(i)+".weight_v"] = torch.zeros(m.weight.shape, dtype=torch.double)
-            if m.bias!=None:
-                momentum_dict[str(i)+".bias_m"] = torch.zeros(m.bias.shape, dtype=torch.double)
-                momentum_dict[str(i)+".bias_v"] = torch.zeros(m.bias.shape, dtype=torch.double)
-               
-            momentum_dict[str(i)+".b_t"] = torch.zeros(m.weight.shape, dtype=torch.double)
-
-            momentum_dict[str(i)+".layer_step"] = 0
-            momentum_dict[str(i)+".code_step"] = 0
-
-    #last layer 
-    for m in model[-1]:
-        if isinstance(m,nn.Linear):
-            momentum_dict["-1.weight_m"] = torch.zeros(m.weight.shape, dtype=torch.double)
-            momentum_dict["-1.weight_v"] = torch.zeros(m.weight.shape, dtype=torch.double)
-            if m.bias!=None:
-                momentum_dict["-1.bias_m"] = torch.zeros(m.bias.shape, dtype=torch.double)
-                momentum_dict["-1.bias_v"] = torch.zeros(m.bias.shape, dtype=torch.double)
-
-            momentum_dict["-1.layer_step"] = 0
-            
-
-
-    if not init_vals:
-        for key in momentum_dict:
-            momentum_dict[key] = 0
-    return momentum_dict
+from altmin import simpleNN
 
 
 def select_func(m, x, tmp, i):
@@ -53,22 +19,22 @@ def select_func(m, x, tmp, i):
         # I can probably tell cpp to return a tensor instead of a numpy
         # I'll come back to this
 
-        x = torch.from_numpy(fast_altmin.lin(x, weight, bias))
+        x = torch.from_numpy(nanobind.lin(x, weight, bias))
     elif isinstance(m, nn.ReLU):
-        fast_altmin.ReLU_inplace(x)
+        nanobind.ReLU_inplace(x)
     elif isinstance(m, nn.Sigmoid):
-        fast_altmin.sigmoid_inplace(x)
+        nanobind.sigmoid_inplace(x)
     elif isinstance(m, nn.Sequential):
         for n in m:
             if isinstance(n, nn.Linear):
                 weight = tmp[i]
                 bias = torch.reshape(tmp[i+1], (len(tmp[i+1]), 1))
                 i += 2
-                x = torch.from_numpy(fast_altmin.lin(x, weight, bias))
+                x = torch.from_numpy(nanobind.lin(x, weight, bias))
             elif isinstance(n, nn.ReLU):
-                fast_altmin.ReLU_inplace(x)
+                nanobind.ReLU_inplace(x)
             elif isinstance(n, nn.Sigmoid):
-                fast_altmin.sigmoid_inplace(x)
+                nanobind.sigmoid_inplace(x)
     else:
         pass
         #print(m)
@@ -153,9 +119,9 @@ def cf_update_codes(codes, model_mods, targets, criterion,  mu=0.003, lambda_c=0
         #I think targets and next codes can be merged into one var
         lr = 0.3
         if isinstance(lin, nn.Linear):
-            fast_altmin.update_codes(lin.weight.data, lin.bias.data, mods, codes[-l], targets, criterion, n_iter, last_layer, lr    )
+            nanobind.update_codes(lin.weight.data, lin.bias.data, mods, codes[-l], targets, criterion, n_iter, last_layer, lr    )
         else:
-            fast_altmin.update_codes(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, criterion, n_iter, last_layer, lr )
+            nanobind.update_codes(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, criterion, n_iter, last_layer, lr )
 
     return codes
 
@@ -178,16 +144,16 @@ def cf_update_hidden_weights(model_mods, inputs, codes, lambda_w, n_iter, lr, mo
        
         mods = conv_mods(nmod, lin)
        
-        fast_altmin.update_hidden_weights(lin.weight.data, lin.bias.data, mods, c_in, c_out, momentum_dict[str(idx)+".weight_m"], momentum_dict[str(idx)+".weight_v"],
+        nanobind.update_hidden_weights(lin.weight.data, lin.bias.data, mods, c_in, c_out, momentum_dict[str(idx)+".weight_m"], momentum_dict[str(idx)+".weight_v"],
                                         momentum_dict[str(idx)+".bias_m"], momentum_dict[str(idx)+".bias_v"], n_iter, lr, init_vals, 
                                         momentum_dict[str(idx)+".layer_step"])
         momentum_dict[str(idx)+".layer_step"] += n_iter
 
         
 def cf_update_last_layer(model, inputs, targets, criterion, n_iter, lr, momentum_dict, init_vals ):
-    #fast_altmin.update_last_layer(model_mods[1].weight.data, model_mods[1].bias.data, conv_mods(model_mods), inputs, targets, criterion, n_iter)#
+    #nanobind.update_last_layer(model_mods[1].weight.data, model_mods[1].bias.data, conv_mods(model_mods), inputs, targets, criterion, n_iter)#
     #conv_mods is set up stupidly
-    fast_altmin.update_last_layer(model[-1][1].weight.data,model[-1][1].bias.data, conv_mods(model[-1],-1), inputs.detach(), targets, 
+    nanobind.update_last_layer(model[-1][1].weight.data,model[-1][1].bias.data, conv_mods(model[-1],-1), inputs.detach(), targets, 
                                            momentum_dict["-1.weight_m"], momentum_dict["-1.weight_v"], momentum_dict["-1.bias_m"], 
                                            momentum_dict["-1.bias_v"], criterion, n_iter, lr, init_vals, momentum_dict["-1.layer_step"] )
     momentum_dict["-1.layer_step"] += n_iter

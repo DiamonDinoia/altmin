@@ -2,8 +2,7 @@ import sys
 
 try:
     from skbuild import setup
-    import nanobind
-    import torch
+    import nanobind 
 except ImportError:
     print("The preferred way to invoke 'setup.py' is via pip, as in 'pip "
           "install .'. If you wish to run the setup script directly, you must "
@@ -14,11 +13,11 @@ except ImportError:
 setup(
     name="altmin",
     version="0.0.1",
-    author="Wenzel Jakob",
-    author_email="wenzel.jakob@epfl.ch",
-    description="An example minimal project that compiles bindings using nanobind and scikit-build",
-    url="https://github.com/wjakob/nanobind_example",
-    license="BSD",
+    author="Tom Maguire",
+    author_email="thomas.d.maguire@btinternet.com",
+    description="cpp implementation of alternating minimisation",
+    url="https://github.com/DiamonDinoia/altmin",
+    #license="BSD",
     packages=['altmin'],
     package_dir={'': 'src'},
     cmake_install_dir="src/altmin",

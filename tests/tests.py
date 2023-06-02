@@ -15,9 +15,9 @@ import torch.optim as optim
 import pickle
 import os, sys 
 sys.path.insert(0, os.path.abspath("../artifacts"))
-from fast_altmin import cf_get_codes, cf_update_codes, cf_update_hidden_weights, cf_update_last_layer, store_momentums
-from altmin import get_mods, get_codes, update_codes, update_last_layer_, update_hidden_weights_adam_, simpleNN
-import fast_altmin
+from control_flow import cf_get_codes, cf_update_codes, cf_update_hidden_weights, cf_update_last_layer
+from altmin import get_mods, get_codes, update_codes, update_last_layer_, update_hidden_weights_adam_, store_momentums, simpleNN
+import nanobind
 
 # Assert all values are the same to tolerance of ulp
 def check_equal(first_imp, second_imp, eps):
@@ -33,7 +33,7 @@ def check_equal_bias(first_imp, second_imp,eps):
 class TestHelloWorldOut(unittest.TestCase):
     # This test basically just checks nanobind is still working in it's simplest form
     def test_output_from_cpp(self):
-        res = fast_altmin.hello_world_out()
+        res = nanobind.hello_world_out()
         assert(res == "Hi python from c++")
 
 class TestMatrixMultiplication(unittest.TestCase):
@@ -41,7 +41,7 @@ class TestMatrixMultiplication(unittest.TestCase):
     def test_matrix_multiplication_in_cpp(self):
         a = np.asarray([[3, 2], [-1, 4]])
         b = np.asarray([[1, 0], [1, 1]])
-        c = fast_altmin.matrix_multiplication(a, b)
+        c = nanobind.matrix_multiplication(a, b)
         assert((c == np.asarray([[5, 2], [3, 4]])).all())
 
 # These tests check the layers that have been implemented in c++.
@@ -63,7 +63,7 @@ class TestLayers(unittest.TestCase):
         in_tensor = torch.rand(1, 2, dtype=torch.double)
         weight = lin.weight.data
         bias = torch.reshape(lin.bias.data, (len(lin.bias.data), 1))
-        cpp_imp = fast_altmin.lin(in_tensor,
+        cpp_imp = nanobind.lin(in_tensor,
                                       weight, bias)
         python_imp = lin(in_tensor).detach().numpy()
         self.check_equal(cpp_imp, python_imp)
@@ -73,7 +73,7 @@ class TestLayers(unittest.TestCase):
         in_tensor = torch.rand(5, 4, dtype=torch.double)
         weight = lin.weight.data
         bias = torch.reshape(lin.bias.data, (len(lin.bias.data), 1))
-        cpp_imp = fast_altmin.lin(in_tensor,
+        cpp_imp = nanobind.lin(in_tensor,
                                       weight, bias)
         python_imp = lin(in_tensor).detach().numpy()
         self.check_equal(cpp_imp, python_imp)
@@ -85,7 +85,7 @@ class TestLayers(unittest.TestCase):
         in_tensor = torch.rand(5, 10, dtype=torch.double)
         python_imp = relu(in_tensor)
         # In tensor data updated in place
-        cpp_imp = fast_altmin.ReLU(
+        cpp_imp = nanobind.ReLU(
             in_tensor)
 
         self.check_equal(cpp_imp, python_imp)
@@ -95,7 +95,7 @@ class TestLayers(unittest.TestCase):
         in_tensor = torch.rand(5, 10, dtype=torch.double)
         python_imp = sigmoid(in_tensor)
         # In tensor data changed in place?
-        cpp_imp = fast_altmin.sigmoid(
+        cpp_imp = nanobind.sigmoid(
             in_tensor)
 
         self.check_equal(cpp_imp, python_imp)
@@ -110,21 +110,21 @@ class TestCriterion(unittest.TestCase):
     def test_BCELoss(self):
         targets = torch.round(torch.rand(1, 10, dtype=torch.double))
         predictions = torch.rand(1, 10, dtype=torch.double)
-        cpp_loss = fast_altmin.BCELoss(predictions, targets)
+        cpp_loss = nanobind.BCELoss(predictions, targets)
         python_loss = nn.BCELoss()(predictions, targets)
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
     def test_batch_BCELoss(self):
         targets = torch.round(torch.rand(5, 10, dtype=torch.double))
         predictions = torch.rand(5, 10, dtype=torch.double)
-        cpp_loss = fast_altmin.BCELoss(predictions, targets)
+        cpp_loss = nanobind.BCELoss(predictions, targets)
         python_loss = nn.BCELoss()(predictions, targets)
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
     def test_MSELoss(self):
         targets = torch.rand(1, 10, dtype=torch.double)
         predictions = torch.rand(1, 10, dtype=torch.double)
-        cpp_loss = fast_altmin.MSELoss(predictions, targets)
+        cpp_loss = nanobind.MSELoss(predictions, targets)
         python_loss = nn.functional.mse_loss(
             predictions, targets)
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
@@ -132,7 +132,7 @@ class TestCriterion(unittest.TestCase):
     def test_batch_MSELoss(self):
         targets = torch.rand(5, 10, dtype=torch.double)
         predictions = torch.rand(5, 10, dtype=torch.double)
-        cpp_loss = fast_altmin.MSELoss(predictions, targets)
+        cpp_loss = nanobind.MSELoss(predictions, targets)
         python_loss = nn.functional.mse_loss(
             predictions, targets)
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
@@ -143,7 +143,7 @@ class TestDerivatives(unittest.TestCase):
     def test_ReLU_derivative(self):
         in_tensor = torch.rand(5, 3)
         in_tensor -= 0.5
-        out = fast_altmin.differentiate_ReLU(in_tensor)
+        out = nanobind.differentiate_ReLU(in_tensor)
         for x in range(len(out)):
             for y in range(len(out[x])):
                 if in_tensor[x][y] >= 0.0:
@@ -320,7 +320,7 @@ class TestAdam(unittest.TestCase):
         #print(a)
         #print(b)
         #print(c)
-        fast_altmin.test_adam(a,b,c,d, False)
+        nanobind.test_adam(a,b,c,d, False)
         #print(a)
         #print(b)
         #print(c)
@@ -334,7 +334,7 @@ class TestAdam(unittest.TestCase):
         # print("\n\n\n")
         # print(m_t)
         # print(val)
-        fast_altmin.test_adam(m_t,v_t,val,grad, True)
+        nanobind.test_adam(m_t,v_t,val,grad, True)
         # print(m_t)
         # print(val)
 
@@ -356,7 +356,7 @@ class TestTorch(unittest.TestCase):
         out.backward()
         with torch.no_grad():
             x -= x.grad
-        fast_altmin.autograd_example(input)
+        nanobind.autograd_example(input)
         self.check_equal(x,input)        
 
     def test_torch_lin(self):
@@ -366,7 +366,7 @@ class TestTorch(unittest.TestCase):
         in_tensor = torch.rand(10,5)
         python_out = lin(in_tensor)
         cpp_out = torch.rand(10, 3)
-        fast_altmin.test_tensor_lin(in_tensor, weight, bias, cpp_out)
+        nanobind.test_tensor_lin(in_tensor, weight, bias, cpp_out)
         self.check_equal(python_out, cpp_out)
 
     def test_autograd(self):
@@ -377,7 +377,7 @@ class TestTorch(unittest.TestCase):
         targets = torch.round(torch.rand(2,3)) 
         python_out = lin(in_tensor)
         cpp_out = torch.rand(10, 3)
-        fast_altmin.test_autograd(in_tensor, weight, bias, targets)
+        nanobind.test_autograd(in_tensor, weight, bias, targets)
 
         
 
