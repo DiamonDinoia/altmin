@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: fast-altmin
+Version: 0.0.1
+Summary: cpp implementation of alternating minimisation
+Home-page: https://github.com/DiamonDinoia/altmin
+Author: Tom Maguire
+Author-email: thomas.d.maguire@btinternet.com
+License: BSD
+Requires-Python: >=3.7
