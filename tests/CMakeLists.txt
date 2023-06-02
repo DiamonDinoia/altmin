@@ -32,7 +32,7 @@ CPMAddPackage(
 # and download/intstall only those files
 
 # Possible change 3
-#install(DIRECTORY ${altmin_SOURCE_DIR}/ DESTINATION ${CMAKE_SOURCE_DIR}/artifacts/altmin)
+install(DIRECTORY ${altmin_SOURCE_DIR}/ DESTINATION ${CMAKE_SOURCE_DIR}/artifacts/altmin)
 # install(FILES ${CMAKE_SOURCE_DIR}/src/control_flow.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
  add_executable(eigen-test eigen-performance.cpp)
