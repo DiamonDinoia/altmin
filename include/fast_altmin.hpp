@@ -4,7 +4,7 @@
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
-#include <torch/torch.h>
+// #include <torch/torch.h>
 
 #include <iostream>
 #include <vector>
@@ -13,7 +13,8 @@ namespace nb = nanobind;
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
-//No functions from in here actually used atm as this is mostly eigen stuff ////////////
+// No functions from in here actually used atm as this is mostly eigen stuff
+// ////////////
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -26,10 +27,10 @@ namespace nb = nanobind;
 Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> lin(
     const nb::DRef<Eigen::MatrixXd> &input,
     const nb::DRef<Eigen::MatrixXd> &weight,
-    const nb::DRef<Eigen::MatrixXd> &bias) {
+    const nb::DRef<Eigen::VectorXd> &bias) {
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> res =
         (input * weight.transpose());
-    for (size_t i = 0; i < res.rows(); ++i) { res.row(i) += bias.transpose(); }
+    for (size_t i = 0; i < res.rows(); ++i) { res.row(i) += bias; }
     return res;
 }
 
@@ -44,26 +45,6 @@ Eigen::MatrixXd ReLU(nb::DRef<Eigen::MatrixXd> input) {
         }
     }
     return res;
-}
-
-// In place and changes passed tensor directly
-void ReLU_autograd(nanobind::ndarray<nanobind::pytorch, float> input) {
-    torch::Tensor conv_in =
-        torch::from_blob(input.data(), {input.shape(0), input.shape(1)});
-    torch::nn::ReLU()->forward(conv_in);
-}
-
-// why relu in place and sigmoid not??????
-// Need to work out how to package torch::Tensor to return it.
-void sigmoid_autograd(nanobind::ndarray<nanobind::pytorch, float> input) {
-    torch::Tensor conv_in =
-        torch::from_blob(input.data(), {input.shape(0), input.shape(1)});
-    torch::Tensor out = torch::sigmoid(conv_in);
-    std::cout << "hi from cpp \n" << out << std::endl;
-    float data = *(out.data_ptr<float>());
-    std::cout << "Fuck youi \n";
-    std::cout << data << "jdsgd";
-    size_t shape[2] = {5, 2};
 }
 
 // Maybe should iterate in the opposite direction as should go in storage order
@@ -112,58 +93,6 @@ void sigmoid_inplace(nb::DRef<Eigen::MatrixXd> input) {
     return;
 }
 
-Eigen::MatrixXd differentiate_sigmoid(nb::DRef<Eigen::MatrixXd> x) {
-    Eigen::MatrixXd ones = Eigen::MatrixXd::Constant(x.rows(), x.cols(), 1.0);
-    Eigen::MatrixXd tmp  = sigmoid(x);
-    return tmp * (ones - tmp);
-}
-
-Eigen::MatrixXd differentiate_ReLU(nb::DRef<Eigen::MatrixXd> x) {
-    int             N = x.rows();
-    int             M = x.cols();
-    Eigen::MatrixXd res(N, M);
-
-    for (size_t i = 0; i < N; ++i) {
-        for (size_t j = 0; j < M; ++j) {
-            if (x(i, j) >= 0.0) {
-                res(i, j) = 1.0;
-            } else {
-                res(i, j) = 0.0;
-            }
-        }
-    }
-    return res;
-}
-
-Eigen::MatrixXd differentiate_last_layer(
-    const nb::DRef<Eigen::MatrixXd> &x,
-    const nb::DRef<Eigen::MatrixXd> &weights) {
-    Eigen::MatrixXd tmp = weights * ReLU(x);
-    Eigen::MatrixXd one = differentiate_sigmoid(tmp);
-    Eigen::MatrixXd two = weights * differentiate_ReLU(x);
-    return one * two;
-    // return x;
-}
-
-float differentiate_mse(const nb::DRef<Eigen::MatrixXd> &predictions,
-                        const nb::DRef<Eigen::MatrixXd> &targets) {
-    int             N   = predictions.rows();
-    int             M   = predictions.cols();
-    double          tot = 0.0;
-    Eigen::MatrixXd weight_derivative(N, M);
-
-    for (size_t i = 0; i < N; ++i) {
-        double sum = 0.0;
-        for (size_t j = 0; j < M; ++j) {
-            weight_derivative(i, j) = (targets(i, j) - predictions(i, j));
-        }
-        sum *= (1.0 / static_cast<float>(M));
-        tot += sum;
-    }
-
-    return tot / static_cast<double>(N);
-}
-
 float BCELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
               const nb::DRef<Eigen::MatrixXd> &targets) {
     int    N   = predictions.rows();
@@ -200,3 +129,69 @@ float MSELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
 
     return tot / static_cast<double>(N);
 }
+
+Eigen::MatrixXd differentiate_sigmoid(const nb::DRef<Eigen::MatrixXd> &x) {
+    Eigen::MatrixXd ones = Eigen::MatrixXd::Constant(x.rows(), x.cols(), 1.0);
+    Eigen::MatrixXd tmp  = sigmoid(x);
+    Eigen::MatrixXd res  = tmp.cwiseProduct(ones - tmp);
+    return res;
+}
+
+Eigen::MatrixXd differentiate_ReLU(const nb::DRef<Eigen::MatrixXd> &x) {
+    int             N = x.rows();
+    int             M = x.cols();
+    Eigen::MatrixXd res(N, M);
+
+    for (size_t i = 0; i < N; ++i) {
+        for (size_t j = 0; j < M; ++j) {
+            if (x(i, j) >= 0.0) {
+                res(i, j) = 1.0;
+            } else {
+                res(i, j) = 0.0;
+            }
+        }
+    }
+    return res;
+}
+
+Eigen::MatrixXd differentiate_BCELoss(const nb::DRef<Eigen::MatrixXd> &output,
+                                      const nb::DRef<Eigen::MatrixXd> &target) {
+    int             N    = output.rows();
+    int             M    = output.cols();
+    double          eps  = 1e-12;
+    double          norm = -1.0 / ((double)M * (double)N);
+
+    Eigen::MatrixXd tmp  = Eigen::MatrixXd::Constant(N, M, 1.0 + eps);
+    Eigen::MatrixXd res =
+        norm *
+        ((target - output)
+             .cwiseQuotient(
+                 (tmp - output).cwiseProduct((output.array() + eps).matrix())));
+    return res;
+}
+
+Eigen::MatrixXd differentiate_MSELoss(const nb::DRef<Eigen::MatrixXd> &output,
+                                      const nb::DRef<Eigen::MatrixXd> &target) {
+    int             N    = output.rows();
+    int             M    = output.cols();
+    double          norm = (2.0 / ((double)M * (double)N));
+
+    Eigen::MatrixXd res  = norm * (output - target);
+    return res;
+}
+
+// // Doesn't really need to be a function but for completness
+// Breaks build
+// std::vector<Eigen::MatrixXd> differentiate_linear_layer(
+//     nb::DRef<Eigen::MatrixXd> &input) {
+//     int                          N = input.rows();
+//     int                          M = input.cols();
+
+//     Eigen::MatrixXd dw = input;
+//     std::vector<Eigen::MatrixXd> grads;
+//     // dw
+//     grads.push_back(dw);
+//     // db - This is wront dim
+//     grads.push_back(Eigen::MatrixXd::Constant(N, M, 1.0));
+//     return grads;
+// }

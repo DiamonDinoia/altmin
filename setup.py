@@ -5,6 +5,7 @@ try:
     import torch
     import nanobind
     
+    
 except ImportError:
     print("The preferred way to invoke 'setup.py' is via pip, as in 'pip "
           "install .'. If you wish to run the setup script directly, you must "
@@ -24,5 +25,8 @@ setup(
     package_dir={'': 'src'},
     cmake_install_dir="src/fast_altmin",
     include_package_data=True,
-    python_requires=">=3.7"
+    python_requires=">=3.7",
+    install_requires = [
+        'altmin@git+https://github.com/DiamonDinoia/online-alt-min',
+    ]
 )
