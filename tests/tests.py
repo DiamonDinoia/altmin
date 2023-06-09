@@ -3,7 +3,7 @@ import torch as torch
 import unittest
 import derivatives
 import sys
-from altmin import simpleNN, get_mods, update_last_layer_, update_hidden_weights_adam_, update_codes
+from altmin import simpleNN, get_mods, update_last_layer_, update_hidden_weights_adam_, update_codes, FFNet
 import pickle 
 import fast_altmin
 
@@ -258,19 +258,55 @@ class TestUpdateFunctions(unittest.TestCase):
         #Run twice to test parameters returned correctly after first execution
         update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
         update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
+
+    def test_update_weights_parallel(self):
+        # Setup
+        in_tensor = torch.rand(5, 2, dtype=torch.double)
+        codes = [torch.rand(5,4, dtype=torch.double).detach(), torch.rand(5,3, dtype=torch.double).detach()]
+        targets = torch.round(torch.rand(5, 1, dtype=torch.double))
+        n_iter = 5
+        lr = 0.008 
+
+        # Model setup
+        model_cpp = simpleNN(2, [4,3],1)
+        model_python = pickle.loads(pickle.dumps(model_cpp))
+
+        # cpp
+        model_cpp = get_mods(model_cpp)
+        model_cpp = model_cpp[1:]
+        momentum_dict_cpp = fast_altmin.store_momentums(model_cpp, init_vals = True)
+        # Run twice to test parameters returned correctly after first execution
+        fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes,targets, 0,n_iter, lr, momentum_dict_cpp,True)
+        fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes, targets, 0,n_iter, lr, momentum_dict_cpp,False)
+
+        # Python
+        model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model_python = model_python[1:]
+        #Run twice to test parameters returned correctly after first execution
+        update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
+        update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
+        update_last_layer_(model_python[-1], codes[-1], targets, nn.BCELoss(), n_iter)
+        update_last_layer_(model_python[-1], codes[-1], targets, nn.BCELoss(), n_iter)
                  
         for x,m in enumerate(model_cpp):
             if isinstance(m, nn.Linear):
                 #Assert model params are updated the same
                 check_equal(model_python[x].weight.data, model_cpp[x].weight.data, 10e8)
                 check_equal_bias(model_python[x].bias.data, model_cpp[x].bias.data, 10e8)
+        #check last layer 
+        check_equal(model_python[-1][1].weight.data, model_cpp[-1][1].weight.data, 10e8)
+        check_equal_bias(model_python[-1][1].bias.data, model_cpp[-1][1].bias.data, 10e8)
+
+    
 
     #Slightly too inaccurate
-    def test_update_codes(self):
+    def test_update_codes_BCELoss(self):
         # Setup 
-        targets = torch.round(torch.rand(1, 1, dtype=torch.double))
-        code_one = torch.rand(1,4, dtype=torch.double) - 0.5
-        code_two = torch.rand(1,3, dtype=torch.double) - 0.5
+        targets = torch.round(torch.rand(5, 1, dtype=torch.double))
+        code_one = torch.rand(5,4, dtype=torch.double) - 0.5
+        code_two = torch.rand(5,3, dtype=torch.double) - 0.5
         #code_two = torch.tensor([[-0.5479, 0.2508,  0.5361]], dtype=torch.double)
         codes_cpp = [code_one, code_two]
         codes_python = [code_one.detach().clone(), code_two.detach().clone()]
@@ -303,6 +339,21 @@ class TestUpdateFunctions(unittest.TestCase):
         for x in range(len(codes_cpp)):
             if x==0: continue
             check_equal(codes_python[x], codes_cpp[x], 10e6)
+
+
+    # def test_update_codes_MSELoss(self):
+    #     model_cpp = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True)
+    #     model_python = pickle.loads(pickle.dumps(model_cpp))
+
+    #     #cpp
+    #     model_cpp = get_mods(model_cpp)
+    #     model_cpp = model_cpp[1:]
+
+    #     #python
+    #     model_python = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
+    #                  scheduler=lambda epoch: 1/2**(epoch//8))
+    #     model[-1].optimizer.param_groups[0]['lr'] = 0.008
+    #     model = model[1:]
 
 
         
