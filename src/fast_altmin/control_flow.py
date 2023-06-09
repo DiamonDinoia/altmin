@@ -48,7 +48,7 @@ def store_momentums(model, init_vals):
 def select_func(m, x, tmp, i):
     if isinstance(m, nn.Linear):
         weight = tmp[i]
-        bias = torch.reshape(tmp[i+1], (len(tmp[i+1]), 1))
+        bias = tmp[i+1]
         i += 2
         # I can probably tell cpp to return a tensor instead of a numpy
         # I'll come back to this
@@ -62,7 +62,7 @@ def select_func(m, x, tmp, i):
         for n in m:
             if isinstance(n, nn.Linear):
                 weight = tmp[i]
-                bias = torch.reshape(tmp[i+1], (len(tmp[i+1]), 1))
+                bias = tmp[i+1]
                 i += 2
                 x = torch.from_numpy(fast_altmin.lin(x, weight, bias))
             elif isinstance(n, nn.ReLU):
@@ -116,49 +116,16 @@ def conv_mods(nmod, lin):
         mods.append(1)
     return mods
 
-def cf_update_codes(codes, model_mods, targets, criterion,  mu=0.003, lambda_c=0.0, n_iter=5, lr=0.3):
 
-    id_codes = [i for i, m in enumerate(model_mods) if hasattr(
-        m, 'has_codes') and getattr(m, 'has_codes')]
-
-
-    for l in range(1, len(codes)+1):
-        idx = id_codes[-l]
-        codes[-l].requires_grad_(True)
-        codes_initial = codes[-l].clone()
-
-        if idx+1 in id_codes:
-            nmod = (lambda x: x)
-            lin = model_mods[idx+1]
-        else:
-            nmod, lin = (lambda x: x), (lambda x: x) 
-            if idx+1 < len(model_mods):
-                nmod = model_mods[idx+1]
-            if idx+2 < len(model_mods):
-                lin = model_mods[idx+2]
-
-
-        #Use int to signify to cpp what loss func to use
-        if l == 1:  # last layer
-            #loss_fn = lambda x: criterion(x, targets)
-            last_layer = 1
-        else:       # intermediate layers
-            #loss_fn = lambda x: mu*torch.nn.functional.mse_loss(x, codes[-l+1].detach())
-            last_layer = 0
-            targets = codes[-l+1]
-
-        mods = conv_mods(nmod,lin)
+def cf_update_last_layer(model, inputs, targets, n_iter, lr, momentum_dict, init_vals ):
+    #fast_altmin.update_last_layer(model_mods[1].weight.data, model_mods[1].bias.data, conv_mods(model_mods), inputs, targets, criterion, n_iter)#
+    #conv_mods is set up stupidly
+    is_last_layer = 1
+    fast_altmin.update_weights(model[-1][1].weight.data,model[-1][1].bias.data, conv_mods(model[-1],-1), inputs.detach(), targets, 
+                                            momentum_dict["-1.weight_m"], momentum_dict["-1.weight_v"], momentum_dict["-1.bias_m"], 
+                                            momentum_dict["-1.bias_v"], is_last_layer, n_iter, lr, init_vals, momentum_dict["-1.layer_step"] )
+    momentum_dict["-1.layer_step"] += n_iter
         
-        criterion = 0
-        #I think targets and next codes can be merged into one var
-        lr = 0.3
-        if isinstance(lin, nn.Linear):
-            fast_altmin.update_codes(lin.weight.data, lin.bias.data, mods, codes[-l], targets, criterion, n_iter, last_layer, lr    )
-        else:
-            fast_altmin.update_codes(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, criterion, n_iter, last_layer, lr )
-
-    return codes
-
 def cf_update_hidden_weights(model_mods, inputs, codes, lambda_w, n_iter, lr, momentum_dict, init_vals):
     lr_weights = 0.008
     id_codes = [i for i,m in enumerate(model_mods) if hasattr(m, 'has_codes') and getattr(m, 'has_codes')]
@@ -178,66 +145,22 @@ def cf_update_hidden_weights(model_mods, inputs, codes, lambda_w, n_iter, lr, mo
        
         mods = conv_mods(nmod, lin)
        
-        fast_altmin.update_hidden_weights(lin.weight.data, lin.bias.data, mods, c_in, c_out, momentum_dict[str(idx)+".weight_m"], momentum_dict[str(idx)+".weight_v"],
-                                        momentum_dict[str(idx)+".bias_m"], momentum_dict[str(idx)+".bias_v"], n_iter, lr, init_vals, 
-                                        momentum_dict[str(idx)+".layer_step"])
-        momentum_dict[str(idx)+".layer_step"] += n_iter
-
-        
-def cf_update_last_layer(model, inputs, targets, criterion, n_iter, lr, momentum_dict, init_vals ):
-    #fast_altmin.update_last_layer(model_mods[1].weight.data, model_mods[1].bias.data, conv_mods(model_mods), inputs, targets, criterion, n_iter)#
-    #conv_mods is set up stupidly
-    fast_altmin.update_last_layer(model[-1][1].weight.data,model[-1][1].bias.data, conv_mods(model[-1],-1), inputs.detach(), targets, 
-                                           momentum_dict["-1.weight_m"], momentum_dict["-1.weight_v"], momentum_dict["-1.bias_m"], 
-                                           momentum_dict["-1.bias_v"], criterion, n_iter, lr, init_vals, momentum_dict["-1.layer_step"] )
-    momentum_dict["-1.layer_step"] += n_iter
-    
-
-
-
-def cf_update_last_layer_eigen(model, inputs, targets, n_iter, lr, momentum_dict, init_vals ):
-    #fast_altmin.update_last_layer(model_mods[1].weight.data, model_mods[1].bias.data, conv_mods(model_mods), inputs, targets, criterion, n_iter)#
-    #conv_mods is set up stupidly
-    is_last_layer = 1
-    fast_altmin.update_weights_eigen(model[-1][1].weight.data,model[-1][1].bias.data, conv_mods(model[-1],-1), inputs.detach(), targets, 
-                                            momentum_dict["-1.weight_m"], momentum_dict["-1.weight_v"], momentum_dict["-1.bias_m"], 
-                                            momentum_dict["-1.bias_v"], is_last_layer, n_iter, lr, init_vals, momentum_dict["-1.layer_step"] )
-    momentum_dict["-1.layer_step"] += n_iter
-        
-def cf_update_hidden_weights_eigen(model_mods, inputs, codes, lambda_w, n_iter, lr, momentum_dict, init_vals):
-    lr_weights = 0.008
-    id_codes = [i for i,m in enumerate(model_mods) if hasattr(m, 'has_codes') and getattr(m, 'has_codes')]
-
-    if hasattr(model_mods, 'n_inputs'):
-        x = inputs.view(-1, model_mods.n_inputs)
-    else:
-        x = inputs
-
-    for idx, c_in, c_out in zip(id_codes, [x]+codes[:-1], codes):
-        lin = model_mods[idx]
-        if idx >= 1 and not idx-1 in id_codes:
-            nmod = model_mods[idx-1]
-        else:
-            nmod = lambda x: x
-
-       
-        mods = conv_mods(nmod, lin)
-       
         is_last_layer = 0
-        fast_altmin.update_weights_eigen(lin.weight.data, lin.bias.data, mods, c_in, c_out, momentum_dict[str(idx)+".weight_m"], momentum_dict[str(idx)+".weight_v"],
+        fast_altmin.update_weights(lin.weight.data, lin.bias.data, mods, c_in, c_out, momentum_dict[str(idx)+".weight_m"], momentum_dict[str(idx)+".weight_v"],
                                         momentum_dict[str(idx)+".bias_m"], momentum_dict[str(idx)+".bias_v"], is_last_layer, n_iter, lr, init_vals, 
                                         momentum_dict[str(idx)+".layer_step"])
         
         
         momentum_dict[str(idx)+".layer_step"] += n_iter
 
-def cf_update_codes_eigen(codes, model_mods, targets, criterion,  mu=0.003, lambda_c=0.0, n_iter=5, lr=0.3):
+def cf_update_codes(codes, model_mods, targets, criterion, mu=0.003, lambda_c=0.0, n_iter=5, lr=0.3):
 
     id_codes = [i for i, m in enumerate(model_mods) if hasattr(
         m, 'has_codes') and getattr(m, 'has_codes')]
 
 
     for l in range(1, len(codes)+1):
+
         idx = id_codes[-l]
         codes[-l].requires_grad_(True)
         codes_initial = codes[-l].clone()
@@ -260,14 +183,14 @@ def cf_update_codes_eigen(codes, model_mods, targets, criterion,  mu=0.003, lamb
         else:       # intermediate layers
             #loss_fn = lambda x: mu*torch.nn.functional.mse_loss(x, codes[-l+1].detach())
             last_layer = 0
-            targets = codes[-l+1]
+            targets = codes[-l+1].detach()
 
         mods = conv_mods(nmod,lin)
         
         criterion = 0
         #I think targets and next codes can be merged into one var
-        lr = 0.3
+       
         if isinstance(lin, nn.Linear):
-            fast_altmin.update_codes_eigen(lin.weight.data, lin.bias.data, mods, codes[-l], targets, last_layer, n_iter, lr    )
+            fast_altmin.update_codes(lin.weight.data, lin.bias.data, mods, codes[-l], targets, last_layer, n_iter, lr ,mu )
         else:
-            fast_altmin.update_codes_eigen(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, last_layer, n_iter,  lr )
+            fast_altmin.update_codes(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, last_layer, n_iter,  lr,mu )

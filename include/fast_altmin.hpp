@@ -93,7 +93,7 @@ void sigmoid_inplace(nb::DRef<Eigen::MatrixXd> input) {
     return;
 }
 
-float BCELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
+double BCELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
               const nb::DRef<Eigen::MatrixXd> &targets) {
     int    N   = predictions.rows();
     int    M   = predictions.cols();
@@ -112,7 +112,7 @@ float BCELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
     return tot / static_cast<double>(N);
 }
 
-float MSELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
+double MSELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
               const nb::DRef<Eigen::MatrixXd> &targets) {
     int    N   = predictions.rows();
     int    M   = predictions.cols();
@@ -123,7 +123,7 @@ float MSELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
             sum += (targets(i, j) - predictions(i, j)) *
                    (targets(i, j) - predictions(i, j));
         }
-        sum *= (1.0 / static_cast<float>(M));
+        sum *= (1.0 / static_cast<double>(M));
         tot += sum;
     }
 

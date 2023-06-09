@@ -18,14 +18,14 @@
 
 #install(TARGETS hi DESTINATION ${CMAKE_SOURCE_DIR}/tests)
 
-CPMAddPackage(
-        NAME altmin
-        GIT_REPOSITORY https://github.com/DiamonDinoia/online-alt-min.git
-        GIT_TAG master
-        EXCLUDE_FROM_ALL YES
-        GIT_SHALLOW YES
-        DOWNLOAD_ONLY YES
-)
+# CPMAddPackage(
+#         NAME altmin
+#         GIT_REPOSITORY https://github.com/DiamonDinoia/online-alt-min.git
+#         GIT_TAG master
+#         EXCLUDE_FROM_ALL YES
+#         GIT_SHALLOW YES
+#         DOWNLOAD_ONLY YES
+# )
 # the directory name here altmin can be changed to anything. 
 # this might be usefdul if we call this project altmin to void confusion
 # also if you only need a subset of the files in the repo, you can specify them here 

@@ -117,7 +117,7 @@ void adam_eigen_bias(nb::DRef<Eigen::VectorXd>        m_t,
                          (v_t_correct.cwiseSqrt().array() + eps).matrix()));
 }
 
-void update_weights_eigen(
+void update_weights(
     nb::DRef<Eigen::MatrixXd> weight, nb::DRef<Eigen::VectorXd> bias,
     std::vector<int> mods, const nb::DRef<Eigen::MatrixXd> &inputs,
     const nb::DRef<Eigen::MatrixXd> &targets,
@@ -135,6 +135,7 @@ void update_weights_eigen(
     for (size_t it = 0; it < n_iter; it++) {
         output = apply_mods(weight, bias, mods, inputs, mods.size());
 
+        
         // Need differentiate bceloss to return a cpp type
         // so need to refactor those functions so they have a test function.
         if (is_last_layer == 0) {
@@ -142,6 +143,8 @@ void update_weights_eigen(
         } else {
             dL_doutput = differentiate_BCELoss(output, targets);
         }
+        
+
         //  I think resize will only work for one operation tbh
         for (int x = mods.size() - 1; x > -1; x--) {
             int i = mods[x];
@@ -171,13 +174,12 @@ void update_weights_eigen(
 
 // Need to prove one iter doesn't make a difference as have lost some
 // functionality here It might affect cnns
-void update_codes_eigen(const nb::DRef<Eigen::MatrixXd> &weight,
+void update_codes(const nb::DRef<Eigen::MatrixXd> &weight,
                         const nb::DRef<Eigen::VectorXd> &bias,
                         std::vector<int> mods, nb::DRef<Eigen::MatrixXd> codes,
                         const nb::DRef<Eigen::MatrixXd> &targets,
-                        size_t is_last_layer, size_t n_iter, float lr) {
-    float           mu       = 0.003;
-    float           momentum = 0.9;
+                        size_t is_last_layer, size_t n_iter, double lr, double mu) {
+    double           momentum = 0.9;
 
     Eigen::MatrixXd dL_dc;
     Eigen::MatrixXd tmp;
@@ -186,35 +188,35 @@ void update_codes_eigen(const nb::DRef<Eigen::MatrixXd> &weight,
     for (size_t it = 0; it < n_iter; it++) {
         output = apply_mods(weight, bias, mods, codes, mods.size());
 
+
         // Need differentiate bceloss to return a cpp type
         // so need to refactor those functions so they have a test function.
         if (is_last_layer == 0) {
             dL_doutput = differentiate_MSELoss(output, targets);
         } else {
-            dL_doutput = (1 / mu) * differentiate_BCELoss(output, targets);
+            dL_doutput = (1.0 / mu) * differentiate_BCELoss(output, targets);
         }
+
         //  I think resize will only work for one operation tbh
         for (int x = mods.size() - 1; x > -1; x--) {
             int i = mods[x];
             if (i == 0) {
+    
                 tmp        = apply_mods(weight, bias, mods, codes, x);
-                dL_doutput = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
+      
+                
+                dL_dc = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
             } else if (i == 1) {
-                // tmp   = apply_mods(weight, bias, mods, codes, x);
-                // dL_dW = dL_doutput.transpose() * tmp;
-                // dL_db = dL_doutput.colwise().sum();
-                // break;
-                dL_dc = dL_doutput * weight;
+                dL_doutput = dL_doutput * weight;
             } else if (i == 2) {
                 tmp = apply_mods(weight, bias, mods, codes, x);
                 dL_doutput =
                     dL_doutput.cwiseProduct(differentiate_sigmoid(tmp));
             } else {
-                std::cout << "Layer not impl yet" << std::endl;
             }
         }
 
-        codes = codes - dL_dc * ((1.0 + momentum) * lr);
+        codes = codes - (((1.0 + momentum) * lr) * dL_dc);
     }
 }
 
@@ -236,7 +238,7 @@ NB_MODULE(fast_altmin, m) {
     m.def("matrix_in", &matrix_in);
     m.def("matrix_out", &matrix_out);
     m.def("matrix_multiplication", &matrix_multiplication);
-    m.def("update_weights_eigen", &update_weights_eigen);
-    m.def("update_codes_eigen", &update_codes_eigen);
+    m.def("update_weights", &update_weights);
+    m.def("update_codes", &update_codes);
     m.def("apply_mods", &apply_mods);
 }
