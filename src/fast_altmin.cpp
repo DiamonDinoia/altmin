@@ -172,6 +172,71 @@ void update_weights(
     }
 }
 
+void update_all_weights(std::vector<nb::DRef<Eigen::MatrixXd>> weights, std::vector<nb::DRef<Eigen::VectorXd>> biases,
+    std::vector<std::vector<int>> mods, std::vector<nb::DRef<Eigen::MatrixXd>> inputs,
+    std::vector<nb::DRef<Eigen::MatrixXd>> targets,
+    std::vector<nb::DRef<Eigen::MatrixXd>> weight_ms, std::vector<nb::DRef<Eigen::MatrixXd>> weight_vs,
+    std::vector<nb::DRef<Eigen::VectorXd>> bias_ms, std::vector<nb::DRef<Eigen::VectorXd>> bias_vs,
+    size_t n_iter, float lr, bool init_vals, int step){
+    
+    Eigen::MatrixXd dL_dW;
+    Eigen::VectorXd dL_db;
+    Eigen::MatrixXd tmp;
+    Eigen::MatrixXd output;
+    Eigen::MatrixXd dL_doutput;
+    
+    bool flag = init_vals;
+    for (int idx = 0; idx < weights.size(); idx++){
+
+        if (flag){
+            init_vals = true;
+        }
+
+        // Todo: Move if statement logic outside of for loop
+        for (size_t it = 0; it < n_iter; it++) {
+            output = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], mods[idx].size());
+
+            
+            // Need differentiate bceloss to return a cpp type
+            // so need to refactor those functions so they have a test function.
+            if ((idx + 1) == weights.size()) {
+                dL_doutput = differentiate_BCELoss(output, targets[idx]);
+            } else {
+                dL_doutput = differentiate_MSELoss(output, targets[idx]);
+            }
+            
+
+            //  I think resize will only work for one operation tbh
+            for (int x = mods[idx].size() - 1; x > -1; x--) {
+                int i = mods[idx][x];
+                if (i == 0) {
+                    tmp        = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
+                    dL_doutput = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
+                } else if (i == 1) {
+                    tmp   = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
+                    dL_dW = dL_doutput.transpose() * tmp;
+                    dL_db = dL_doutput.colwise().sum();
+                    break;
+                } else if (i == 2) {
+                    tmp = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
+                    dL_doutput =
+                        dL_doutput.cwiseProduct(differentiate_sigmoid(tmp));
+                } else {
+                    std::cout << "Layer not impl yet" << std::endl;
+                }
+            }
+            adam_eigen(weight_ms[idx], weight_vs[idx], weights[idx], dL_dW, lr, init_vals,
+                    (step + it + 1));
+            adam_eigen_bias(bias_ms[idx], bias_vs[idx], biases[idx], dL_db, lr, init_vals,
+                            (step + it + 1));
+            init_vals = false;
+        }
+
+    }
+
+
+
+}
 // Need to prove one iter doesn't make a difference as have lost some
 // functionality here It might affect cnns
 void update_codes(const nb::DRef<Eigen::MatrixXd> &weight,
@@ -239,6 +304,7 @@ NB_MODULE(fast_altmin, m) {
     m.def("matrix_out", &matrix_out);
     m.def("matrix_multiplication", &matrix_multiplication);
     m.def("update_weights", &update_weights);
+    m.def("update_all_weights", &update_all_weights);
     m.def("update_codes", &update_codes);
     m.def("apply_mods", &apply_mods);
 }

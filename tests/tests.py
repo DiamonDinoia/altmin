@@ -275,10 +275,11 @@ class TestUpdateFunctions(unittest.TestCase):
         model_cpp = get_mods(model_cpp)
         model_cpp = model_cpp[1:]
         momentum_dict_cpp = fast_altmin.store_momentums(model_cpp, init_vals = True)
+
         # Run twice to test parameters returned correctly after first execution
         fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes,targets, 0,n_iter, lr, momentum_dict_cpp,True)
         fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes, targets, 0,n_iter, lr, momentum_dict_cpp,False)
-
+        
         # Python
         model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
                      scheduler=lambda epoch: 1/2**(epoch//8))
@@ -289,12 +290,14 @@ class TestUpdateFunctions(unittest.TestCase):
         update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
         update_last_layer_(model_python[-1], codes[-1], targets, nn.BCELoss(), n_iter)
         update_last_layer_(model_python[-1], codes[-1], targets, nn.BCELoss(), n_iter)
-                 
+        
         for x,m in enumerate(model_cpp):
+            
             if isinstance(m, nn.Linear):
                 #Assert model params are updated the same
                 check_equal(model_python[x].weight.data, model_cpp[x].weight.data, 10e8)
                 check_equal_bias(model_python[x].bias.data, model_cpp[x].bias.data, 10e8)
+
         #check last layer 
         check_equal(model_python[-1][1].weight.data, model_cpp[-1][1].weight.data, 10e8)
         check_equal_bias(model_python[-1][1].bias.data, model_cpp[-1][1].bias.data, 10e8)
@@ -337,23 +340,41 @@ class TestUpdateFunctions(unittest.TestCase):
 
         # Assert python and cpp give the same codes
         for x in range(len(codes_cpp)):
-            if x==0: continue
             check_equal(codes_python[x], codes_cpp[x], 10e6)
 
 
     # def test_update_codes_MSELoss(self):
+    #     # Setup 
+    #     targets = torch.round(torch.rand(5, 1, dtype=torch.double))
+    #     code_one = torch.rand(5,100, dtype=torch.double) - 0.5
+    #     code_two = torch.rand(5,100, dtype=torch.double) - 0.5
+    #     codes_cpp = [code_one, code_two]
+    #     codes_python = [code_one.detach().clone(), code_two.detach().clone()]
+    #     n_iter = 1
+    #     lr = 0.3
+    #     mu = 0.003
+
+    #     # Model setup
     #     model_cpp = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True)
     #     model_python = pickle.loads(pickle.dumps(model_cpp))
 
     #     #cpp
     #     model_cpp = get_mods(model_cpp)
     #     model_cpp = model_cpp[1:]
+    #     for it in range(5):
+    #         fast_altmin.cf_update_codes(codes_cpp, model_cpp, targets.detach(), nn.MSELoss(), mu=mu, lambda_c=0.0, n_iter=n_iter, lr=lr)
 
     #     #python
-    #     model_python = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
+    #     model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
     #                  scheduler=lambda epoch: 1/2**(epoch//8))
-    #     model[-1].optimizer.param_groups[0]['lr'] = 0.008
-    #     model = model[1:]
+    #     model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+    #     model_python = model_python[1:]
+    #     for it in range(5):
+    #         update_codes(codes_python, model_python, targets, nn.MSELoss(), mu, 0, n_iter, lr)
+
+    #     # Assert python and cpp give the same codes
+    #     for x in range(len(codes_cpp)):
+    #         check_equal(codes_python[x], codes_cpp[x], 10e6)
 
 
         
