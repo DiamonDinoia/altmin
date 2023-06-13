@@ -13,6 +13,11 @@ def derivative_MSELoss(output, target):
     norm = 2.0/output.shape[1]
     return (norm * (output - target))/output.shape[0]
 
+def derivative_CrossEntropyLoss(output, target):
+    x = output.shape[0]
+    output = nn.Softmax(dim=1)(output)
+    target = torch.nn.functional.one_hot(target, 5)
+    return (output - target) / x
 
 def derivative_sigmoid(input):
     return nn.Sigmoid()(input)*(1-nn.Sigmoid()(input))

@@ -51,15 +51,16 @@ Eigen::MatrixXd apply_mods(const nb::DRef<Eigen::MatrixXd> &weight,
                            std::vector<int>                 mods,
                            const nb::DRef<Eigen::MatrixXd> &inputs, int end) {
     Eigen::MatrixXd output = inputs;
-
     for (int count = 0; count < end; count++) {
         int i = mods[count];
         if (i == 0) {
             ReLU_inplace(output);
         } else if (i == 1) {
             output = lin(output, weight, bias);
-        } else {
+        } else if (i==2) {
             sigmoid_inplace(output);
+        }else{
+            std::cout << "cpp: layer not imp" << std::endl;
         }
     }
 
@@ -177,7 +178,7 @@ void update_all_weights(std::vector<nb::DRef<Eigen::MatrixXd>> weights, std::vec
     std::vector<nb::DRef<Eigen::MatrixXd>> targets,
     std::vector<nb::DRef<Eigen::MatrixXd>> weight_ms, std::vector<nb::DRef<Eigen::MatrixXd>> weight_vs,
     std::vector<nb::DRef<Eigen::VectorXd>> bias_ms, std::vector<nb::DRef<Eigen::VectorXd>> bias_vs,
-    size_t n_iter, float lr, bool init_vals, int step){
+    size_t n_iter, float lr, bool init_vals, int step, int criterion){
     
     Eigen::MatrixXd dL_dW;
     Eigen::VectorXd dL_db;
@@ -199,7 +200,7 @@ void update_all_weights(std::vector<nb::DRef<Eigen::MatrixXd>> weights, std::vec
             
             // Need differentiate bceloss to return a cpp type
             // so need to refactor those functions so they have a test function.
-            if ((idx + 1) == weights.size()) {
+            if ((idx + 1) == weights.size() && criterion == 0) {
                 dL_doutput = differentiate_BCELoss(output, targets[idx]);
             } else {
                 dL_doutput = differentiate_MSELoss(output, targets[idx]);
@@ -233,17 +234,79 @@ void update_all_weights(std::vector<nb::DRef<Eigen::MatrixXd>> weights, std::vec
         }
 
     }
-
-
-
 }
+
+void update_all_weights_CrossEntropyLoss(std::vector<nb::DRef<Eigen::MatrixXd>> weights, std::vector<nb::DRef<Eigen::VectorXd>> biases,
+    std::vector<std::vector<int>> mods, std::vector<nb::DRef<Eigen::MatrixXd>> inputs,
+    std::vector<nb::DRef<Eigen::MatrixXd>> codes, nb::DRef<Eigen::VectorXi> targets,
+    std::vector<nb::DRef<Eigen::MatrixXd>> weight_ms, std::vector<nb::DRef<Eigen::MatrixXd>> weight_vs,
+    std::vector<nb::DRef<Eigen::VectorXd>> bias_ms, std::vector<nb::DRef<Eigen::VectorXd>> bias_vs,
+    size_t n_iter, float lr, bool init_vals, int step, int criterion){
+    
+    Eigen::MatrixXd dL_dW;
+    Eigen::VectorXd dL_db;
+    Eigen::MatrixXd tmp;
+    Eigen::MatrixXd output;
+    Eigen::MatrixXd dL_doutput;
+    
+    bool flag = init_vals;
+    for (int idx = 0; idx < weights.size(); idx++){
+        if (flag){
+            init_vals = true;
+        }
+
+        // Todo: Move if statement logic outside of for loop
+        for (size_t it = 0; it < n_iter; it++) {
+            output = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], mods[idx].size());
+
+            // Need differentiate bceloss to return a cpp type
+            // so need to refactor those functions so they have a test function.
+            if ((idx + 1) == weights.size()) {
+                dL_doutput = differentiate_CrossEntropyLoss(output, targets, output.cols());
+                //dL_doutput = differentiate_BCELoss(output, targets[idx]);
+            } else {
+                dL_doutput = differentiate_MSELoss(output, codes[idx]);
+            }
+        
+            //  I think resize will only work for one operation tbh
+            for (int x = mods[idx].size() - 1; x > -1; x--) {
+                int i = mods[idx][x];
+                if (i == 0) {
+                    tmp        = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
+                    dL_doutput = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
+                } else if (i == 1) {
+                    tmp   = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
+                    dL_dW = dL_doutput.transpose() * tmp;
+                    dL_db = dL_doutput.colwise().sum();
+                    break;
+                } else if (i == 2) {
+                    tmp = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
+                    dL_doutput =
+                        dL_doutput.cwiseProduct(differentiate_sigmoid(tmp));
+                } else {
+                    std::cout << "Layer not impl yet" << std::endl;
+                }
+            }
+            adam_eigen(weight_ms[idx], weight_vs[idx], weights[idx], dL_dW, lr, init_vals,
+                    (step + it + 1));
+            adam_eigen_bias(bias_ms[idx], bias_vs[idx], biases[idx], dL_db, lr, init_vals,
+                            (step + it + 1));
+            init_vals = false;
+        }
+
+    }
+}
+
+
+
+
 // Need to prove one iter doesn't make a difference as have lost some
 // functionality here It might affect cnns
 void update_codes(const nb::DRef<Eigen::MatrixXd> &weight,
                         const nb::DRef<Eigen::VectorXd> &bias,
                         std::vector<int> mods, nb::DRef<Eigen::MatrixXd> codes,
                         const nb::DRef<Eigen::MatrixXd> &targets,
-                        size_t is_last_layer, size_t n_iter, double lr, double mu) {
+                        size_t is_last_layer, size_t n_iter, double lr, double mu, int criterion) {
     double           momentum = 0.9;
 
     Eigen::MatrixXd dL_dc;
@@ -256,10 +319,14 @@ void update_codes(const nb::DRef<Eigen::MatrixXd> &weight,
 
         // Need differentiate bceloss to return a cpp type
         // so need to refactor those functions so they have a test function.
-        if (is_last_layer == 0) {
-            dL_doutput = differentiate_MSELoss(output, targets);
+        if (is_last_layer == 1) {
+            if (criterion == 0){
+                dL_doutput = (1.0 / mu) * differentiate_BCELoss(output, targets);
+            }else if(criterion == 2){
+                dL_doutput = (1.0 / mu) * differentiate_MSELoss(output, targets);
+            }            
         } else {
-            dL_doutput = (1.0 / mu) * differentiate_BCELoss(output, targets);
+             dL_doutput = differentiate_MSELoss(output, targets);
         }
 
         //  I think resize will only work for one operation tbh
@@ -285,6 +352,59 @@ void update_codes(const nb::DRef<Eigen::MatrixXd> &weight,
     }
 }
 
+void update_codes_CrossEntropyLoss(const nb::DRef<Eigen::MatrixXd> &weight,
+                        const nb::DRef<Eigen::VectorXd> &bias,
+                        std::vector<int> mods, nb::DRef<Eigen::MatrixXd> codes,
+                        const nb::DRef<Eigen::VectorXi> &targets,
+                        size_t is_last_layer, size_t n_iter, double lr, double mu, int criterion) {
+    double           momentum = 0.9;
+
+    Eigen::MatrixXd dL_dc;
+    Eigen::MatrixXd tmp;
+    Eigen::MatrixXd output;
+    Eigen::MatrixXd dL_doutput;
+    for (size_t it = 0; it < n_iter; it++) {
+        output = apply_mods(weight, bias, mods, codes, mods.size());
+
+
+        // Need differentiate bceloss to return a cpp type
+        // so need to refactor those functions so they have a test function.
+
+        dL_doutput = (1.0 / mu) * differentiate_CrossEntropyLoss(output, targets, output.cols());
+            
+
+        //  I think resize will only work for one operation tbh
+        for (int x = mods.size() - 1; x > -1; x--) {
+            int i = mods[x];
+            if (i == 0) {
+    
+                tmp        = apply_mods(weight, bias, mods, codes, x);
+      
+                
+                dL_dc = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
+            } else if (i == 1) {
+                dL_doutput = dL_doutput * weight;
+            } else if (i == 2) {
+                tmp = apply_mods(weight, bias, mods, codes, x);
+                dL_doutput =
+                    dL_doutput.cwiseProduct(differentiate_sigmoid(tmp));
+            } else {
+            }
+        }
+
+        codes = codes - (((1.0 + momentum) * lr) * dL_dc);
+    }
+}
+
+struct Dog {
+    std::string name;
+
+    std::string bark() const {
+        return name + ": woof!";
+    }
+};
+
+
 NB_MODULE(fast_altmin, m) {
     m.def("BCELoss", &BCELoss);
     m.def("MSELoss", &MSELoss);
@@ -307,4 +427,15 @@ NB_MODULE(fast_altmin, m) {
     m.def("update_all_weights", &update_all_weights);
     m.def("update_codes", &update_codes);
     m.def("apply_mods", &apply_mods);
+    m.def("log_softmax", &log_softmax);
+    m.def("negative_log_likelihood", &negative_log_likelihood);
+    m.def("cross_entropy_loss", &cross_entropy_loss);
+    m.def("differentiate_CrossEntropyLoss", &differentiate_CrossEntropyLoss);
+    m.def("update_codes_CrossEntropyLoss", &update_codes_CrossEntropyLoss);
+    m.def("update_all_weights_CrossEntropyLoss", &update_all_weights_CrossEntropyLoss);
+    nb::class_<Dog>(m, "Dog")
+        .def(nb::init<>())
+        .def(nb::init<const std::string &>())
+        .def("bark", &Dog::bark)
+        .def_rw("name", &Dog::name);
 }

@@ -3,7 +3,7 @@ import torch as torch
 import unittest
 import derivatives
 import sys
-from altmin import simpleNN, get_mods, update_last_layer_, update_hidden_weights_adam_, update_codes, FFNet
+from altmin import simpleNN, get_mods, update_last_layer_, update_hidden_weights_adam_, update_codes, FFNet, get_codes, load_dataset
 import pickle 
 import fast_altmin
 
@@ -108,6 +108,33 @@ class TestCriterion(unittest.TestCase):
             predictions, targets)
         self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
 
+    def test_log_softmax(self):
+        inputs = torch.rand(1,5, dtype=torch.double)
+        python_imp = nn.LogSoftmax(dim=1)(inputs)
+        fast_altmin.log_softmax(inputs)
+        check_equal(inputs, python_imp, 10e8)
+
+    def test_batch_log_softmax(self):
+        inputs = torch.rand(3,5, dtype=torch.double)
+        python_imp = nn.LogSoftmax(dim=1)(inputs)
+        fast_altmin.log_softmax(inputs)
+        check_equal(inputs, python_imp, 10e8)
+
+    def test_negative_log_likelihood(self):
+        inputs = torch.rand(3,5, dtype=torch.double)
+        targets = torch.tensor([2,1,4])
+        inputs = nn.LogSoftmax(dim=1)(inputs)
+        python_loss = nn.NLLLoss()(inputs, targets)
+        cpp_loss = fast_altmin.negative_log_likelihood(inputs,targets)
+        self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
+
+    def test_cross_entropy_loss(self):
+        inputs = torch.rand(3,5, dtype=torch.double)
+        targets = torch.tensor([2,1,4])
+        python_loss = nn.CrossEntropyLoss()(inputs,targets)
+        cpp_loss = fast_altmin.cross_entropy_loss(inputs,targets)
+        self.assertAlmostEqual(cpp_loss, python_loss.item(), 6)
+
 
 
 class TestDerivatives(unittest.TestCase):
@@ -166,6 +193,19 @@ class TestDerivatives(unittest.TestCase):
 
         grad_python = derivatives.derivative_BCELoss(output_python,target)
         grad_cpp = torch.from_numpy(fast_altmin.differentiate_BCELoss(output_cpp,target))
+        check_equal(grad_python,grad_cpp, 10e9) 
+
+    def test_CrossEntropyLoss_derivative(self):
+        output_python = torch.rand(4,5).requires_grad_(True) 
+        target = torch.tensor([2,1,4,0])
+        num_classes = 5
+        output_cpp = output_python.detach().clone()
+
+        loss = nn.CrossEntropyLoss()(output_python,target)
+        loss.backward()
+        grad_python = output_python.grad
+        grad_cpp = torch.from_numpy(fast_altmin.differentiate_CrossEntropyLoss(output_cpp,target, num_classes))
+        #grad_cpp = derivatives.derivative_CrossEntropyLoss(output_cpp,target)
         check_equal(grad_python,grad_cpp, 10e9) 
 
     def test_apply_mods(self):
@@ -259,7 +299,7 @@ class TestUpdateFunctions(unittest.TestCase):
         update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
         update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
 
-    def test_update_weights_parallel(self):
+    def test_update_weights_parallel_BCELoss(self):
         # Setup
         in_tensor = torch.rand(5, 2, dtype=torch.double)
         codes = [torch.rand(5,4, dtype=torch.double).detach(), torch.rand(5,3, dtype=torch.double).detach()]
@@ -277,8 +317,8 @@ class TestUpdateFunctions(unittest.TestCase):
         momentum_dict_cpp = fast_altmin.store_momentums(model_cpp, init_vals = True)
 
         # Run twice to test parameters returned correctly after first execution
-        fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes,targets, 0,n_iter, lr, momentum_dict_cpp,True)
-        fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes, targets, 0,n_iter, lr, momentum_dict_cpp,False)
+        fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes,targets, 0,n_iter, lr, momentum_dict_cpp,True,nn.BCELoss())
+        fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes, targets, 0,n_iter, lr, momentum_dict_cpp,False,nn.BCELoss())
         
         # Python
         model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
@@ -302,9 +342,55 @@ class TestUpdateFunctions(unittest.TestCase):
         check_equal(model_python[-1][1].weight.data, model_cpp[-1][1].weight.data, 10e8)
         check_equal_bias(model_python[-1][1].bias.data, model_cpp[-1][1].bias.data, 10e8)
 
-    
 
-    #Slightly too inaccurate
+    def test_update_weights_parallel_CrossEntropyLoss(self):
+        # Setup
+        in_tensor = torch.rand(200, 784, dtype=torch.double)
+        
+        codes = [torch.rand(200,100, dtype=torch.double).detach(), torch.rand(200,100, dtype=torch.double).detach()]
+        targets = torch.randint(0, 9, (200,))
+        n_iter = 5
+        lr = 0.008 
+
+        # Model setup
+        model_cpp = FFNet(784, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()
+        model_python = pickle.loads(pickle.dumps(model_cpp))
+
+        # cpp
+        model_cpp = get_mods(model_cpp, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model_cpp[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model_cpp = model_cpp[1:]
+        momentum_dict_cpp = fast_altmin.store_momentums(model_cpp, init_vals = True)
+        #outputs, codes = get_codes(model_cpp, in_tensor)
+        # Run twice to test parameters returned correctly after first execution
+        fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes,targets, 0,n_iter, lr, momentum_dict_cpp,True, nn.CrossEntropyLoss())
+        fast_altmin.cf_update_weights_parallel(model_cpp, in_tensor.detach(), codes, targets, 0,n_iter, lr, momentum_dict_cpp,False, nn.CrossEntropyLoss())
+        
+        # Python
+        model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model_python = model_python[1:]
+        print(model_python)
+        #Run twice to test parameters returned correctly after first execution
+        update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
+        update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
+        update_last_layer_(model_python[-1], codes[-1], targets, nn.CrossEntropyLoss(), n_iter)
+        update_last_layer_(model_python[-1], codes[-1], targets, nn.CrossEntropyLoss(), n_iter)
+        
+        for x,m in enumerate(model_cpp):
+            
+            if isinstance(m, nn.Linear):
+                #Assert model params are updated the same
+                check_equal(model_python[x].weight.data, model_cpp[x].weight.data, 10e8)
+                check_equal_bias(model_python[x].bias.data, model_cpp[x].bias.data, 10e8)
+
+        #check last layer 
+        check_equal(model_python[-1][1].weight.data, model_cpp[-1][1].weight.data, 10e8)
+        check_equal_bias(model_python[-1][1].bias.data, model_cpp[-1][1].bias.data, 10e8)
+
+
     def test_update_codes_BCELoss(self):
         # Setup 
         targets = torch.round(torch.rand(5, 1, dtype=torch.double))
@@ -343,40 +429,47 @@ class TestUpdateFunctions(unittest.TestCase):
             check_equal(codes_python[x], codes_cpp[x], 10e6)
 
 
-    # def test_update_codes_MSELoss(self):
-    #     # Setup 
-    #     targets = torch.round(torch.rand(5, 1, dtype=torch.double))
-    #     code_one = torch.rand(5,100, dtype=torch.double) - 0.5
-    #     code_two = torch.rand(5,100, dtype=torch.double) - 0.5
-    #     codes_cpp = [code_one, code_two]
-    #     codes_python = [code_one.detach().clone(), code_two.detach().clone()]
-    #     n_iter = 1
-    #     lr = 0.3
-    #     mu = 0.003
-
-    #     # Model setup
-    #     model_cpp = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True)
-    #     model_python = pickle.loads(pickle.dumps(model_cpp))
-
-    #     #cpp
-    #     model_cpp = get_mods(model_cpp)
-    #     model_cpp = model_cpp[1:]
-    #     for it in range(5):
-    #         fast_altmin.cf_update_codes(codes_cpp, model_cpp, targets.detach(), nn.MSELoss(), mu=mu, lambda_c=0.0, n_iter=n_iter, lr=lr)
-
-    #     #python
-    #     model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
-    #                  scheduler=lambda epoch: 1/2**(epoch//8))
-    #     model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
-    #     model_python = model_python[1:]
-    #     for it in range(5):
-    #         update_codes(codes_python, model_python, targets, nn.MSELoss(), mu, 0, n_iter, lr)
-
-    #     # Assert python and cpp give the same codes
-    #     for x in range(len(codes_cpp)):
-    #         check_equal(codes_python[x], codes_cpp[x], 10e6)
+    def test_update_codes_CrossEntropyLoss(self):
+        # Setup 
+        targets = torch.tensor([2,1,4,0, 5])
+        code_one = torch.rand(5,100, dtype=torch.double) - 0.5
+        code_two = torch.rand(5,100, dtype=torch.double) - 0.5
+        codes_cpp = [code_one, code_two]
+        codes_python = [code_one.detach().clone(), code_two.detach().clone()]
+        n_iter = 1
+        lr = 0.3
+        mu = 0.003
 
 
+        # Model setup
+        model_cpp = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()
+        model_python = pickle.loads(pickle.dumps(model_cpp))
+
+        
+        #cpp
+        model_cpp = get_mods(model_cpp)
+        model_cpp = model_cpp[1:]
+
+        for it in range(1):
+            fast_altmin.cf_update_codes(codes_cpp, model_cpp, targets.detach(), nn.CrossEntropyLoss(), mu=mu, lambda_c=0.0, n_iter=n_iter, lr=lr)
+     
+        #python
+        model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model_python = model_python[1:]
+        for it in range(1):
+            update_codes(codes_python, model_python, targets, nn.CrossEntropyLoss(), mu, 0, n_iter, lr)
+        #print(codes_python[0])
+        # Assert python and cpp give the same codes
+        for x in range(len(codes_cpp)):
+            check_equal(codes_python[x], codes_cpp[x], 10e6)
+
+    def test_bindings(self):
+        d = fast_altmin.Dog("Magnus")
+        print(d)
+        print(d.name)
+        print(d.bark())
         
 
 if __name__ == '__main__':

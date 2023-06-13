@@ -130,6 +130,77 @@ double MSELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
     return tot / static_cast<double>(N);
 }
 
+void log_softmax(nb::DRef<Eigen::MatrixXd> input){
+    int    N   = input.rows();
+    int    M   = input.cols();
+    double sum_exps = 0.0;
+    
+    for (size_t i = 0; i < N; ++i) {
+        std::vector<double> exps;
+        for (size_t j = 0; j < M; ++j) {
+            exps.push_back(std::exp(input(i,j)));
+        }
+        sum_exps = 0.0;
+        for (auto exp : exps)
+            sum_exps += exp;
+
+        for (size_t j = 0; j < M; ++j) {
+            input(i,j) = std::log(exps[j] / sum_exps);
+        }
+    }
+
+}
+
+void softmax(nb::DRef<Eigen::MatrixXd> input){
+    int    N   = input.rows();
+    int    M   = input.cols();
+    double sum_exps = 0.0;
+    
+    for (size_t i = 0; i < N; ++i) {
+        std::vector<double> exps;
+        for (size_t j = 0; j < M; ++j) {
+            exps.push_back(std::exp(input(i,j)));
+        }
+        sum_exps = 0.0;
+        for (auto exp : exps)
+            sum_exps += exp;
+
+        for (size_t j = 0; j < M; ++j) {
+            input(i,j) =(exps[j] / sum_exps);
+        }
+    }
+
+}
+
+Eigen::MatrixXd one_hot_encoding(const nb::DRef<Eigen::VectorXi> &input, int num_classes){
+    int N = input.rows();
+    int M = num_classes;
+    Eigen::MatrixXd res(N, M);
+    for (int i = 0; i < N; i++){
+        for (int j = 0; j<M ; j++){
+            if (input[i] == j){
+                res(i,j) = 1;
+            }else{
+                res(i,j) = 0;
+            }
+        }
+    }
+    return res;
+}
+
+double negative_log_likelihood(const nb::DRef<Eigen::MatrixXd> &log_likelihoods, const nb::DRef<Eigen::VectorXi> &targets){
+    double sum = 0.0;
+    for(int i =0 ; i < log_likelihoods.rows(); i++){
+        sum+= log_likelihoods(i,targets(i));
+    }
+    return (-1.0/log_likelihoods.rows())*sum;
+}
+
+double cross_entropy_loss(nb::DRef<Eigen::MatrixXd> input, const nb::DRef<Eigen::VectorXi> &targets){
+    log_softmax(input);
+    return negative_log_likelihood(input, targets);
+}
+
 Eigen::MatrixXd differentiate_sigmoid(const nb::DRef<Eigen::MatrixXd> &x) {
     Eigen::MatrixXd ones = Eigen::MatrixXd::Constant(x.rows(), x.cols(), 1.0);
     Eigen::MatrixXd tmp  = sigmoid(x);
@@ -179,6 +250,18 @@ Eigen::MatrixXd differentiate_MSELoss(const nb::DRef<Eigen::MatrixXd> &output,
     Eigen::MatrixXd res  = norm * (output - target);
     return res;
 }
+
+Eigen::MatrixXd differentiate_CrossEntropyLoss(nb::DRef<Eigen::MatrixXd> output,
+                                      const nb::DRef<Eigen::VectorXi> &target, int num_classes){
+    softmax(output);
+    return (output- one_hot_encoding(target, num_classes))/output.rows();
+}
+
+ 
+// template <typename Derived>
+// void test_eigen_base(const nb::DRef<Eigen::EigenBase<Derived> &targets){
+//     std::cout << targets << std::endl;
+// }
 
 // // Doesn't really need to be a function but for completness
 // Breaks build

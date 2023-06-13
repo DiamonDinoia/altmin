@@ -28,3 +28,7 @@ setup(
     python_requires=">=3.7",
     
 )
+
+# install_requires = [
+#        'altmin@git+https://github.com/DiamonDinoia/online-alt-min'
+#     ]
