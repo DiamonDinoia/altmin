@@ -243,11 +243,13 @@ Eigen::MatrixXd differentiate_BCELoss(const nb::DRef<Eigen::MatrixXd> &output,
 
 Eigen::MatrixXd differentiate_MSELoss(const nb::DRef<Eigen::MatrixXd> &output,
                                       const nb::DRef<Eigen::MatrixXd> &target) {
+    
     int             N    = output.rows();
     int             M    = output.cols();
     double          norm = (2.0 / ((double)M * (double)N));
 
     Eigen::MatrixXd res  = norm * (output - target);
+    
     return res;
 }
 

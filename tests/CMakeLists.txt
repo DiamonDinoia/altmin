@@ -39,4 +39,3 @@
 add_executable(eigen-test eigen-performance.cpp)
 target_link_libraries(eigen-test PRIVATE Eigen )
 target_add_compilation_flags(eigen-test)
-

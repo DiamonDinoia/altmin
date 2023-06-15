@@ -44,6 +44,8 @@ foreach(CXX_STANDARD_VAR 23;20;17)
 endforeach()
 endif()
 
+
+
 set(FLAGS_DEBUG -O0 -fstack-protector-all -Wall -Wextra -pedantic -fno-inline)
 set(FLAGS_RELEASE -O3 -ffp-contract=fast -freciprocal-math
         -fmerge-all-constants -fno-math-errno -march=native -funroll-loops

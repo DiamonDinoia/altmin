@@ -372,7 +372,7 @@ class TestUpdateFunctions(unittest.TestCase):
                      scheduler=lambda epoch: 1/2**(epoch//8))
         model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
         model_python = model_python[1:]
-        print(model_python)
+        #print(model_python)
         #Run twice to test parameters returned correctly after first execution
         update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
         update_hidden_weights_adam_(model_python, in_tensor, codes, lambda_w=0, n_iter=n_iter)
@@ -465,12 +465,66 @@ class TestUpdateFunctions(unittest.TestCase):
         for x in range(len(codes_cpp)):
             check_equal(codes_python[x], codes_cpp[x], 10e6)
 
-    def test_bindings(self):
-        d = fast_altmin.Dog("Magnus")
-        print(d)
-        print(d.name)
-        print(d.bark())
+
+    # def test_tuple_in(self):
+    #     b = tuple((1,2))
+    #     #print(type(b))
+    #     #print(type(b[0]))
+    #     fast_altmin.test_tuple(b)
+
+    def test_layer_class(self):
+        layer_class = fast_altmin.Layer(2,3)
+        layer_class.initialise_matrices(torch.rand(2,3, dtype = torch.double), torch.rand(3, dtype=torch.double))
+        #layer_class.print_weight()
+        layer_relu = fast_altmin.Layer(fast_altmin.Layer.relu)
+
+        nn = fast_altmin.NeuralNetwork()
+        nn.push_back_layer(layer_class)
+
+    # def test_conv(self):
+    #     model = simpleNN(2, [4,3],1)
+    #     model = get_mods(model)
+    #     model = model[1:]
+    #     neural_network = conv_model_to_class(model)
+    #     neural_network.print_info()
+
+    def test_forward(self):
+        in_tensor = torch.rand(4,2,dtype = torch.double)
+        model = simpleNN(2, [4,3],1)
+        model = get_mods(model)
+        model = model[1:]
+        output_python, _ = get_codes(model, in_tensor)
+        neural_network = conv_model_to_class(model)
+        output = neural_network.get_codes(in_tensor)
+        print(output)
+        print(output_python)
         
+def conv_model_to_class(model):
+    neural_network = fast_altmin.NeuralNetwork()
+    create_model_class(model, neural_network)
+    return neural_network
+    
+def create_model_class(model, neural_network):
+    print(model)
+    for mod in model:
+        print(mod)
+        if isinstance(mod, nn.ReLU):
+            layer = fast_altmin.Layer(fast_altmin.Layer.relu)
+            neural_network.push_back_layer(layer)
+        elif isinstance(mod, nn.Linear):
+            layer = fast_altmin.Layer(mod.weight.size(0), mod.weight.size(1))
+            layer.initialise_matrices(mod.weight.data, mod.bias.data)
+            neural_network.push_back_layer(layer)
+        elif isinstance(mod, nn.Sigmoid):
+            layer = fast_altmin.Layer(fast_altmin.Layer.sigmoid)
+            neural_network.push_back_layer(layer)
+        elif isinstance(mod, nn.Sequential):
+            layer = create_model_class(mod, neural_network)
+        else:
+            print("layer not imp yet")
+
+
+    
 
 if __name__ == '__main__':
     unittest.main()

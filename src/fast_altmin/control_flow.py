@@ -206,6 +206,7 @@ def cf_update_weights_parallel(model_mods, inputs, codes, targets, lambda_w, n_i
     else:
         print("Loss not imp yet")
     
+  
     #Technically only need one step var not seperate step for each layer
     #fast_altmin.update_all_weights(weights, biases, mods_list, c_ins, c_outs)
     if criterion == 0 or criterion == 2:
@@ -271,3 +272,4 @@ def cf_update_codes(codes, model_mods, targets, criterion, mu=0.003, lambda_c=0.
                 fast_altmin.update_codes(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, last_layer, n_iter,  lr,mu, criterion )
             else:
                 fast_altmin.update_codes_CrossEntropyLoss(nmod[1].weight.data, nmod[1].bias.data, mods, codes[-l], targets, last_layer, n_iter,  lr,mu, criterion )
+
