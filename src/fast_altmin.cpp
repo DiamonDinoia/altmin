@@ -6,7 +6,9 @@
 #include <nanobind/stl/bind_map.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/shared_ptr.h>
 
+#include <memory>
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -48,434 +50,15 @@ Eigen::MatrixXd matrix_multiplication(
     return x;
 }
 
-Eigen::MatrixXd apply_mods(const nb::DRef<Eigen::MatrixXd> &weight,
-                           const nb::DRef<Eigen::VectorXd> &bias,
-                           std::vector<int>                 mods,
-                           const nb::DRef<Eigen::MatrixXd> &inputs, int end) {
-    
-    //std::cout << "\nstart of apply mods" << std::endl;
-    //std::cout << "inputs" << inputs << "\n" << std::endl;
-    Eigen::MatrixXd output = inputs;
-    
-    for (int count = 0; count < end; count++) {
-        int i = mods[count];
-        if (i == 0) {
-            std::cout << "relu" << std::endl;
-            ReLU_inplace(output);
-            //std::cout << "output after relu" << output << "\n" << std::endl;
-        } else if (i == 1) {
-            std::cout << "lin" << std::endl;
-            output = lin(output, weight, bias);
-            //std::cout << "output after lin" << output << "\n" << std::endl;
-        } else if (i==2) {
-            std::cout << "sigmoid" << std::endl;
-            sigmoid_inplace(output);
-        }else{
-            //std::cout << "cpp: layer not imp" << std::endl;
-        }
-    }
-
-    //std::cout << "End of apply mods" << std::endl;
-
-    return output;
-}
-
-void adam_eigen(nb::DRef<Eigen::MatrixXd> m_t, nb::DRef<Eigen::MatrixXd> v_t,
-                nb::DRef<Eigen::MatrixXd>        val,
-                const nb::DRef<Eigen::MatrixXd> &grad, float lr, bool init_vals,
-                int step) {
-    float beta_1 = 0.9;
-    float beta_2 = 0.999;
-    float eps    = 1e-08;
-
-    if (init_vals == true) {
-
-        m_t = (1 - beta_1) * grad;
-        v_t = (1 - beta_2) * (grad.cwiseProduct(grad));
-
-               
-    } else {
-        m_t = beta_1 * m_t + (1 - beta_1) * grad;
-        v_t = beta_2 * v_t + (1 - beta_2) * (grad.cwiseProduct(grad));
-    }
-
-    Eigen::MatrixXd m_t_correct =
-        m_t / (1.0 - std::pow(beta_1, static_cast<double>(step)));
-    Eigen::MatrixXd v_t_correct =
-        v_t / (1.0 - std::pow(beta_2, static_cast<double>(step)));
-
-
-
-    val = val - lr * (m_t_correct.cwiseQuotient(
-                         (v_t_correct.cwiseSqrt().array() + eps).matrix()));
-}
-
-void adam_eigen_bias(nb::DRef<Eigen::VectorXd>        m_t,
-                     nb::DRef<Eigen::VectorXd>        v_t,
-                     nb::DRef<Eigen::VectorXd>        val,
-                     const nb::DRef<Eigen::VectorXd> &grad, float lr,
-                     bool init_vals, int step) {
-    float beta_1 = 0.9;
-    float beta_2 = 0.999;
-    float eps    = 1e-08;
-
-    if (init_vals == true) {
-        m_t = (1 - beta_1) * grad;
-        v_t = (1 - beta_2) * (grad.cwiseProduct(grad));
-    } else {
-        m_t = beta_1 * m_t + (1 - beta_1) * grad;
-        v_t = beta_2 * v_t + (1 - beta_2) * (grad.cwiseProduct(grad));
-    }
-
-    Eigen::VectorXd m_t_correct =
-        m_t / (1.0 - std::pow(beta_1, static_cast<double>(step)));
-    Eigen::VectorXd v_t_correct =
-        v_t / (1.0 - std::pow(beta_2, static_cast<double>(step)));
-
-    val = val - lr * (m_t_correct.cwiseQuotient(
-                         (v_t_correct.cwiseSqrt().array() + eps).matrix()));
-}
-
-void update_weights(
-    nb::DRef<Eigen::MatrixXd> weight, nb::DRef<Eigen::VectorXd> bias,
-    std::vector<int> mods, const nb::DRef<Eigen::MatrixXd> &inputs,
-    const nb::DRef<Eigen::MatrixXd> &targets,
-    nb::DRef<Eigen::MatrixXd> weight_m, nb::DRef<Eigen::MatrixXd> weight_v,
-    nb::DRef<Eigen::VectorXd> bias_m, nb::DRef<Eigen::VectorXd> bias_v,
-    size_t is_last_layer, size_t n_iter, float lr, bool init_vals, int step) {
-    // Declare necessary vectors outside of for loop
-    Eigen::MatrixXd dL_dW;
-    Eigen::VectorXd dL_db;
-    Eigen::MatrixXd tmp;
-    Eigen::MatrixXd output;
-    Eigen::MatrixXd dL_doutput;
-
-    // Todo: Move if statement logic outside of for loop
-    for (size_t it = 0; it < n_iter; it++) {
-        output = apply_mods(weight, bias, mods, inputs, mods.size());
-
-        
-        // Need differentiate bceloss to return a cpp type
-        // so need to refactor those functions so they have a test function.
-        if (is_last_layer == 0) {
-            dL_doutput = differentiate_MSELoss(output, targets);
-        } else {
-            dL_doutput = differentiate_BCELoss(output, targets);
-        }
-        
-
-        //  I think resize will only work for one operation tbh
-        for (int x = mods.size() - 1; x > -1; x--) {
-            int i = mods[x];
-            if (i == 0) {
-                tmp        = apply_mods(weight, bias, mods, inputs, x);
-                dL_doutput = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
-            } else if (i == 1) {
-                tmp   = apply_mods(weight, bias, mods, inputs, x);
-                dL_dW = dL_doutput.transpose() * tmp;
-                dL_db = dL_doutput.colwise().sum();
-                break;
-            } else if (i == 2) {
-                tmp = apply_mods(weight, bias, mods, inputs, x);
-                dL_doutput =
-                    dL_doutput.cwiseProduct(differentiate_sigmoid(tmp));
-            } else {
-                std::cout << "Layer not impl yet" << std::endl;
-            }
-        }
-        adam_eigen(weight_m, weight_v, weight, dL_dW, lr, init_vals,
-                   (step + it + 1));
-        adam_eigen_bias(bias_m, bias_v, bias, dL_db, lr, init_vals,
-                        (step + it + 1));
-        init_vals = false;
-    }
-}
-
-void update_all_weights(std::vector<nb::DRef<Eigen::MatrixXd>> weights, std::vector<nb::DRef<Eigen::VectorXd>> biases,
-    std::vector<std::vector<int>> mods, std::vector<nb::DRef<Eigen::MatrixXd>> inputs,
-    std::vector<nb::DRef<Eigen::MatrixXd>> targets,
-    std::vector<nb::DRef<Eigen::MatrixXd>> weight_ms, std::vector<nb::DRef<Eigen::MatrixXd>> weight_vs,
-    std::vector<nb::DRef<Eigen::VectorXd>> bias_ms, std::vector<nb::DRef<Eigen::VectorXd>> bias_vs,
-    size_t n_iter, float lr, bool init_vals, int step, int criterion){
-    
-    Eigen::MatrixXd dL_dW;
-    Eigen::VectorXd dL_db;
-    Eigen::MatrixXd tmp;
-    Eigen::MatrixXd output;
-    Eigen::MatrixXd dL_doutput;
-    
-    bool flag = init_vals;
-    for (int idx = 0; idx < weights.size(); idx++){
-
-        if (flag){
-            init_vals = true;
-        }
-
-        // Todo: Move if statement logic outside of for loop
-        for (size_t it = 0; it < n_iter; it++) {
-            //std::cout  << "inputs" << inputs[idx] << "\n" << std::endl;
-            output = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], mods[idx].size());
-
-            
-            // Need differentiate bceloss to return a cpp type
-            // so need to refactor those functions so they have a test function.
-            if ((idx + 1) == weights.size() && criterion == 0) {
-                dL_doutput = differentiate_BCELoss(output, targets[idx]);
-            } else {
-                //std::cout << "outputs" << output << "\n" << std::endl;
-                //std::cout << "target" << targets[idx] << "\n" << std::endl;
-                dL_doutput = differentiate_MSELoss(output, targets[idx]);
-            }
-            //std::cout << "dl_dout " << dL_doutput << "\n" << std::endl;
-
-            
-            //  I think resize will only work for one operation tbh
-            for (int x = mods[idx].size() - 1; x > -1; x--) {
-                int i = mods[idx][x];
-                if (i == 0) {
-                    std::cout << "relu" << std::endl;
-                    tmp        = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
-                    dL_doutput = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
-                } else if (i == 1) {
-                    std::cout << "lin" << std::endl;
-                    //std::cout << "Inputs " << inputs[idx] << "\n" << std::endl;
-                    tmp   = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
-                    
-                    dL_dW = dL_doutput.transpose() * tmp;
-                    dL_db = dL_doutput.colwise().sum();
-                    break;
-                } else if (i == 2) {
-                    std::cout << "sigmoid" << std::endl;
-                    tmp = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
-                    dL_doutput =
-                        dL_doutput.cwiseProduct(differentiate_sigmoid(tmp));
-                } else {
-                    std::cout << "Layer not impl yet" << std::endl;
-                }
-            }
-            //std::cout << "dL_dW: " << dL_dW << "\n" << std::endl;
-            //std::cout << "dL_db: " << dL_db << "\n" << std::endl;
-            
-            
-            adam_eigen(weight_ms[idx], weight_vs[idx], weights[idx], dL_dW, lr, init_vals,
-                    (step + it + 1));
-            adam_eigen_bias(bias_ms[idx], bias_vs[idx], biases[idx], dL_db, lr, init_vals,
-                            (step + it + 1));
-            init_vals = false;
-            std::cout << "weight" << weights[idx] << "\n" << std::endl;
-            std::cout << "bias " << biases[idx] << "\n" << std::endl;
- 
-            
-        }
-        
-    }
-}
-
-void update_all_weights_CrossEntropyLoss(std::vector<nb::DRef<Eigen::MatrixXd>> weights, std::vector<nb::DRef<Eigen::VectorXd>> biases,
-    std::vector<std::vector<int>> mods, std::vector<nb::DRef<Eigen::MatrixXd>> inputs,
-    std::vector<nb::DRef<Eigen::MatrixXd>> codes, nb::DRef<Eigen::VectorXi> targets,
-    std::vector<nb::DRef<Eigen::MatrixXd>> weight_ms, std::vector<nb::DRef<Eigen::MatrixXd>> weight_vs,
-    std::vector<nb::DRef<Eigen::VectorXd>> bias_ms, std::vector<nb::DRef<Eigen::VectorXd>> bias_vs,
-    size_t n_iter, float lr, bool init_vals, int step, int criterion){
-    
-    Eigen::MatrixXd dL_dW;
-    Eigen::VectorXd dL_db;
-    Eigen::MatrixXd tmp;
-    Eigen::MatrixXd output;
-    Eigen::MatrixXd dL_doutput;
-    
-    bool flag = init_vals;
-    for (int idx = 0; idx < weights.size(); idx++){
-        if (flag){
-            init_vals = true;
-        }
-
-        // Todo: Move if statement logic outside of for loop
-        for (size_t it = 0; it < n_iter; it++) {
-            output = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], mods[idx].size());
-
-            // Need differentiate bceloss to return a cpp type
-            // so need to refactor those functions so they have a test function.
-            if ((idx + 1) == weights.size()) {
-                dL_doutput = differentiate_CrossEntropyLoss(output, targets, output.cols());
-                //dL_doutput = differentiate_BCELoss(output, targets[idx]);
-            } else {
-                dL_doutput = differentiate_MSELoss(output, codes[idx]);
-            }
-        
-            //  I think resize will only work for one operation tbh
-            for (int x = mods[idx].size() - 1; x > -1; x--) {
-                int i = mods[idx][x];
-                if (i == 0) {
-                    tmp        = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
-                    dL_doutput = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
-                } else if (i == 1) {
-                    tmp   = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
-                    dL_dW = dL_doutput.transpose() * tmp;
-                    dL_db = dL_doutput.colwise().sum();
-                    break;
-                } else if (i == 2) {
-                    tmp = apply_mods(weights[idx], biases[idx], mods[idx], inputs[idx], x);
-                    dL_doutput =
-                        dL_doutput.cwiseProduct(differentiate_sigmoid(tmp));
-                } else {
-                    std::cout << "Layer not impl yet" << std::endl;
-                }
-            }
-
-            std::cout << "dL_dW: " << dL_dW << "\n" << std::endl;
-            std::cout << "dL_db: " << dL_db << "\n" << std::endl;
-            
-            adam_eigen(weight_ms[idx], weight_vs[idx], weights[idx], dL_dW, lr, init_vals,
-                    (step + it + 1));
-            adam_eigen_bias(bias_ms[idx], bias_vs[idx], biases[idx], dL_db, lr, init_vals,
-                            (step + it + 1));
-            std::cout << "weight" << weights[idx] << "\n" << std::endl;
-            std::cout << "bias " << biases[idx] << "\n" << std::endl;
-            init_vals = false;
-            return;
-        }
-
-    }
-}
-
-
-
-
-// Need to prove one iter doesn't make a difference as have lost some
-// functionality here It might affect cnns
-void update_codes(const nb::DRef<Eigen::MatrixXd> &weight,
-                        const nb::DRef<Eigen::VectorXd> &bias,
-                        std::vector<int> mods, nb::DRef<Eigen::MatrixXd> codes,
-                        const nb::DRef<Eigen::MatrixXd> &targets,
-                        size_t is_last_layer, size_t n_iter, double lr, double mu, int criterion) {
-    double           momentum = 0.9;
-
-    Eigen::MatrixXd dL_dc;
-    Eigen::MatrixXd tmp;
-    Eigen::MatrixXd output;
-    Eigen::MatrixXd dL_doutput;
-    for (size_t it = 0; it < n_iter; it++) {
-
-        output = apply_mods(weight, bias, mods, codes, mods.size());
-     
-        // Need differentiate bceloss to return a cpp type
-        // so need to refactor those functions so they have a test function.
-        if (is_last_layer == 1) {
-            if (criterion == 0){
-                dL_doutput = (1.0 / mu) * differentiate_BCELoss(output, targets);
-            }else if(criterion == 2){
-                dL_doutput = (1.0 / mu) * differentiate_MSELoss(output, targets);
-            }            
-        } else {
-             dL_doutput = differentiate_MSELoss(output, targets);
-        }
-
-        
-                    
-        //  I think resize will only work for one operation tbh
-        for (int x = mods.size() - 1; x > -1; x--) {
-            int i = mods[x];
-            if (i == 0) {
-                //std::cout<<"relu"<<std::endl;
-                tmp        = apply_mods(weight, bias, mods, codes, x);
-      
-               
-                dL_dc = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
-            } else if (i == 1) {
-                //std::cout<<"lin"<<std::endl;
-                dL_doutput = dL_doutput * weight;
-                //std::cout << "dL_dout after lin" << dL_doutput << "\n" << std::endl;
-            } else if (i == 2) {
-                //std::cout<<"sigmoid"<<std::endl;
-                //std::cout << "codes before sigmoid " << codes  << "\n" << std::endl;
-                tmp = apply_mods(weight, bias, mods, codes, x);
-                
-                //std::cout << "tmp before sigmoid" << tmp << "\n" << std::endl;
-                dL_doutput =
-                    dL_doutput.cwiseProduct(differentiate_sigmoid(tmp));
-                //std::cout << "dL_dout after sigmoid" << dL_doutput << "\n" << std::endl;
-               
-            } else {
-            }
-            
-        }
-        //std::cout << "dL_dc" << dL_dc << "\n" << std::endl;
-
-        codes = codes - (((1.0 + momentum) * lr) * dL_dc);
-
-        //std::cout << "codes: " << codes << "\n" << std::endl;
-    }
-}
-
-void update_codes_CrossEntropyLoss(const nb::DRef<Eigen::MatrixXd> &weight,
-                        const nb::DRef<Eigen::VectorXd> &bias,
-                        std::vector<int> mods, nb::DRef<Eigen::MatrixXd> codes,
-                        const nb::DRef<Eigen::VectorXi> &targets,
-                        size_t is_last_layer, size_t n_iter, double lr, double mu, int criterion) {
-    double           momentum = 0.9;
-
-    Eigen::MatrixXd dL_dc;
-    Eigen::MatrixXd tmp;
-    Eigen::MatrixXd output;
-    Eigen::MatrixXd dL_doutput;
-    for (size_t it = 0; it < n_iter; it++) {
-
-        output = apply_mods(weight, bias, mods, codes, mods.size());
-
-
-        // Need differentiate bceloss to return a cpp type
-        // so need to refactor those functions so they have a test function.
-
-        dL_doutput = (1.0 / mu) * differentiate_CrossEntropyLoss(output, targets, output.cols());
-            
-
-        //  I think resize will only work for one operation tbh
-        for (int x = mods.size() - 1; x > -1; x--) {
-            int i = mods[x];
-            if (i == 0) {
-    
-                tmp        = apply_mods(weight, bias, mods, codes, x);
-      
-                
-                dL_dc = dL_doutput.cwiseProduct(differentiate_ReLU(tmp));
-            } else if (i == 1) {
-                dL_doutput = dL_doutput * weight;
-            } else if (i == 2) {
-                tmp = apply_mods(weight, bias, mods, codes, x);
-                dL_doutput =
-                    dL_doutput.cwiseProduct(differentiate_sigmoid(tmp));
-            } else {
-            }
-        }
-
-        codes = codes - (((1.0 + momentum) * lr) * dL_dc);
-    }
-}
-
-struct Dog {
-    std::string name;
-
-    std::string bark() const {
-        return name + ": woof!";
-    }
-};
-
-void test_tuple(std::tuple<int, int> a ){
-    std::cout << "hi" << std::endl;
-}
-
-
-
 class Layer{
     public:
         enum layer_type {
             relu, linear, sigmoid
         };
 
-        Layer(int n, int m, bool has_codes){
-            weight = Eigen::MatrixXd(n,m);
-            bias = Eigen::VectorXd(m);
+        Layer(layer_type layer_type, int batch_size, int n, int m, Eigen::MatrixXd weight, Eigen::VectorXd bias , bool  has_codes){
+            this->weight = weight;
+            this->bias = bias;
             weight_m = Eigen::MatrixXd::Zero(n,m);
             weight_v = Eigen::MatrixXd::Zero(n,m);
             weight_m_t_correct = Eigen::MatrixXd::Zero(n,m);
@@ -485,7 +68,9 @@ class Layer{
             bias_m_t_correct = Eigen::VectorXd::Zero(m);
             bias_v_t_correct = Eigen::VectorXd::Zero(m);
             //4 is batch size need to pass as param
-            codes = Eigen::MatrixXd(4,n);
+            codes = Eigen::MatrixXd(batch_size,n);
+            layer_output = Eigen::MatrixXd(batch_size,n);
+            dL_dc = Eigen::MatrixXd(n,m);
             layer = linear;
             this->has_codes = has_codes;
             init_vals = true;
@@ -495,26 +80,27 @@ class Layer{
             eps    = 1e-08;
             step = 1;
         }
-        Layer(layer_type type){
+        Layer(layer_type type, int batch_size, int n){
             layer = type;
             this->has_codes = false;
+            layer_output = Eigen::MatrixXd(batch_size,n);
+            dL_dout = Eigen::MatrixXd(batch_size,n);
         }
 
-        void initialise_matrices(nb::DRef<Eigen::MatrixXd> weight, nb::DRef<Eigen::VectorXd> bias ){
-            this->weight = weight;
-            this->bias = bias;
-        }
 
         void print_info(){
             switch(layer){
                 case(Layer::layer_type::relu):
                     std::cout << "ReLU" <<  std::endl;
+                    std::cout << "layer out: ("  << layer_output.rows() << " , " << layer_output.cols() << ")" << std::endl;
                     break;
                 case(Layer::layer_type::linear):
-                    std::cout << "Lin: ( " << weight.rows() << " , " << weight.cols() << ") has_codes: " << has_codes  << std::endl; 
+                    std::cout << "Lin: ( " << weight.rows() << " , " << weight.cols() << ") has_codes: " << has_codes  << std::endl;
+                    std::cout << "layer out: ("  << layer_output.rows() << " , " << layer_output.cols() << ")" << std::endl;
                     break;
                 case(Layer::layer_type::sigmoid):
-                    std::cout << "Sigmoid: " << "\n" << std::endl;
+                    std::cout << "Sigmoid: " << std::endl;
+                    std::cout << "layer out: ("  << layer_output.rows() << " , " << layer_output.cols() << ")" << std::endl;
                     break;
             }
         }
@@ -529,8 +115,6 @@ class Layer{
             if (init_vals == true){
                 weight_m = (1 - beta_1) * grad_weight;
                 weight_v = (1 - beta_2) * (grad_weight.cwiseProduct(grad_weight));
-              
-
             }else{
                 weight_m = beta_1 * weight_m + (1 - beta_1) * grad_weight;
                 weight_v = beta_2 * weight_v + (1 - beta_2) * (grad_weight.cwiseProduct(grad_weight));
@@ -556,6 +140,32 @@ class Layer{
                          (bias_v_t_correct.cwiseSqrt().array() + eps).matrix()));
             step = step+1;
         }
+
+        void forward(Eigen::Ref<Eigen::MatrixXd> inputs, bool store_codes){
+            switch(layer){
+                case(Layer::layer_type::relu):
+                    //std::cout << "relu" << std::endl;
+                    layer_output = inputs;
+                    ReLU_inplace(layer_output);
+                    break;
+                    
+                case(Layer::layer_type::linear):
+                    layer_output = lin(inputs, weight, bias);
+                    if (has_codes == true && store_codes == true){
+                        codes = layer_output;
+                    }
+                    break;
+                    
+                case(Layer::layer_type::sigmoid):
+                    //std::cout << "sigmoid" << std::endl;
+                    layer_output = inputs;
+                    sigmoid_inplace(layer_output);
+                    break;
+                    
+            }
+        }
+        
+
         
         friend class NeuralNetwork;
         
@@ -573,6 +183,9 @@ class Layer{
 
         //Code size is (batch_size, n) so need to pass batch size to initialise the memory for this correctly
         Eigen::MatrixXd codes; 
+        Eigen::MatrixXd layer_output;
+        Eigen::MatrixXd dL_dout;
+        Eigen::MatrixXd dL_dc;
         layer_type layer;
         bool has_codes;
         bool init_vals;
@@ -586,326 +199,383 @@ class Layer{
 
 class NeuralNetwork{
     public:
+
+        enum loss_function {
+            BCELoss, MSELoss, CrossEntropyLoss
+        };
+
         //Setup construtor properly later 
-        NeuralNetwork(){
-            n_iter = 1;
+        NeuralNetwork(loss_function loss_fn, int n_iter_weights, int batch_size, int m){
+            n_iter_codes = 1;
+            this->n_iter_weights = n_iter_weights;
             lr_codes = 0.3;
             mu = 0.003;
             momentum = 0.9;
             //This will also be an enum in the future
             criterion = 1;
-            forward = true;
             init_momentum_vals = true;
+            this->loss_fn = loss_fn;
+            inputs = Eigen::MatrixXd(batch_size,m);
         }
 
 
-        void push_back_layer(Layer layer){
-            this->layers.push_back(layer);
+        void push_back_non_lin_layer(Layer::layer_type layer_type, int batch_size, int n){
+            //Have to be shared not unique as python needs access to them as well
+            //https://github.com/pybind/pybind11/issues/115
+            //maybe nanobind has fixed this by now but I couldn't make it work
+            std::shared_ptr<Layer> layer_ptr = std::make_shared<Layer>(Layer(layer_type, batch_size, n));
+            layers.push_back(std::move(layer_ptr));
         }
 
-        void print_info(){
-            int x = 0;
-            for (auto i : layers){
-                std::cout << "Layer " << x << ": ";
-                i.print_info();
-                x+=1;
-            }
+        void push_back_lin_layer(Layer::layer_type layer_type, int batch_size, int n, int m, nb::DRef<Eigen::MatrixXd> weight,
+            nb::DRef<Eigen::VectorXd> bias , bool  has_codes){
+            std::shared_ptr<Layer> layer_ptr = std::make_shared<Layer>(Layer(layer_type, batch_size, n, m, weight, bias, has_codes));
+            layers.push_back(std::move(layer_ptr));
+            
         }
 
-        //Pass whole layer so have access to layer weight and bias
-        void apply_layer(Layer &layer){
-            switch(layer.layer){
-                case(Layer::layer_type::relu):
-                    //std::cout << "relu" << std::endl;
-                    ReLU_inplace(outputs);
-                    break;
-                case(Layer::layer_type::linear):
-                    //std::cout << "lin" << std::endl;
-                    outputs = lin(outputs, layer.weight, layer.bias);
-                    if (layer.has_codes == true && forward == true){
-                        layer.codes = outputs;
-                    }
-                    break;
-                case(Layer::layer_type::sigmoid):
-                    //std::cout << "sigmoid" << std::endl;
-                    sigmoid_inplace(outputs);
-                    break;
-            }
-           
-        }
-
-        Eigen::MatrixXd get_codes(nb::DRef<Eigen::MatrixXd> inputs){
-            outputs = inputs;
-            for (int idx = 0 ; idx< layers.size(); idx++){
-                apply_layer(layers[idx]);    
-            }
-            //There will be a better way to do this but for now need to make sure outputs is empty afyer
-            //More mem effificent to do at start of every func so once working I might swithc to that
-            Eigen::MatrixXd res = outputs;
-            outputs = outputs * 0.0; 
-
-            return res;
-        }
-
-        std::vector<Eigen::MatrixXd> return_codes(){
-            std::vector<Eigen::MatrixXd> codes; 
-
-            for (auto layer : layers){
-                if (layer.has_codes == true){
- 
-     
-                    codes.push_back(layer.codes);
-                }
-            }
-            return codes;
-        }
-
-
-        //Need to work out good name
-        //This is used in the partial derivatives to calculate the input
-        void predict_next_code(Eigen::MatrixXd inputs, int idx, int end_idx){
-            outputs = inputs;
-            if (idx < end_idx){
-                layers[idx].print_info();
-                apply_layer(layers[idx]);
-            }
-           
-            if( idx+1 < end_idx){
-                layers[idx+1].print_info();
-                apply_layer(layers[idx+1]);
-            }
-
-            if( idx+2 < end_idx){
-                layers[idx+2].print_info();
-                apply_layer(layers[idx+2]);
-            }      
-        }
-
-        //This is used to calculate the derivative of a layer
-        void differentiate_layer_for_codes(Eigen::MatrixXd inputs, int start_idx, int end_idx){
-            //Layer to calculate the derivative for 
-            Layer &layer = layers[end_idx];
-           
-            //predict_next_code populates outputs 
-            //Then used to differentiate the layer
-            switch(layer.layer){
-                case(Layer::layer_type::relu):
-                    predict_next_code(inputs, start_idx, end_idx);
-                    dL_dc = dL_dout.cwiseProduct(differentiate_ReLU(outputs));
-                    break;
-                case(Layer::layer_type::linear):
-                    dL_dout = dL_dout * layer.weight;
-                    break;
-                case(Layer::layer_type::sigmoid):
-                    predict_next_code(inputs, start_idx, end_idx);
-                    dL_dout = dL_dout.cwiseProduct(differentiate_sigmoid(outputs));
-                    break;
-            }
-        }
-
-        void differentiate_layer_for_weights(Eigen::MatrixXd inputs, int start_idx, int end_idx){
-            //Layer to calculate the derivative for 
-            Layer &layer = layers[end_idx];
-           
-            //predict_next_code populates outputs 
-            //Then used to differentiate the layer
-            switch(layer.layer){
-                case(Layer::layer_type::relu):
-                    //std::cout << "relu" << std::endl;
-                    predict_next_code(inputs, start_idx, end_idx);
-                    dL_dout = dL_dout.cwiseProduct(differentiate_ReLU(outputs));
-                    break;
-                case(Layer::layer_type::linear):
-                    //std::cout << "lin" << std::endl;
-                    predict_next_code(inputs, start_idx, end_idx);
-                    dL_dW = dL_dout.transpose() * outputs;
-                    dL_db = dL_dout.colwise().sum();
-                    break;
-                case(Layer::layer_type::sigmoid):
-                    //std::cout << "sigmoid" << std::endl;
-                    predict_next_code(inputs, start_idx, end_idx);
-                    dL_dout = dL_dout.cwiseProduct(differentiate_sigmoid(outputs));
-                    break;
-            }
-        }
-
-        
         int get_idx_next_layer_with_codes(int idx){
             for(int index = idx+1; index < layers.size(); index++){
-                Layer layer = layers[index];
-                //layer.print_info();
-                if (layer.has_codes){
-                    //print_info();
-
+                //Layer layer = layers[index];
+                if (layers[index]->has_codes){
                     return index;
                 }
             }
             return layers.size()-1;
         }
 
-        
-
-        void update_codes(nb::DRef<Eigen::MatrixXd> targets){
-            forward = false;
-            bool last_layer = true;
-            int idx_last_code;
-            int end_idx;
-            Eigen::MatrixXd inputs;
-
-            for (int idx = layers.size()-1; idx > -1 ; idx--){
-
-                
-                switch(layers[idx].layer){
+        void construct_pairs(){
+            int end_idx; 
+            int start_idx = 0;
+            for (int idx = 0; idx < layers.size(); idx++){
+                switch(layers[idx]->layer){
                     case(Layer::layer_type::linear):
-                        if (layers[idx].has_codes == false){
+                        if (layers[idx]->has_codes == false){
+                            weight_pairs.push_back(std::make_tuple(start_idx, idx, get_idx_next_layer_with_codes(idx)));
                             continue;
                         }
-                        //Get the id of the next code that had codes or the last layer
+
                         end_idx = get_idx_next_layer_with_codes(idx);
+                        code_pairs.insert(code_pairs.begin(), std::make_tuple(idx, end_idx));
+                        weight_pairs.push_back(std::make_tuple(start_idx, idx, idx));
+                        start_idx = idx;
                         break;
                     default:
                         continue;
                 }
+            }
+        }
 
-                for (size_t it = 0; it<n_iter; it++){
+        void print_info(){
+            int x = 0;
+            for (int idx = 0; idx < layers.size(); idx++){
+                std::cout << "Layer " << x << ": ";
+                layers[idx]->print_info();
+                x+=1;
+            }
+           
+        }
 
+
+        Eigen::MatrixXd get_codes(nb::DRef<Eigen::MatrixXd> inputs_nb){
+            inputs = inputs_nb;
+            layers[0]->forward(inputs, true);
+            for (int idx = 1 ; idx< layers.size(); idx++){
+                layers[idx]->forward(layers[idx-1]->layer_output, true);
+            }
+            return layers[layers.size()-1]->layer_output;
+        }
+
+        // Could expose the variables in the bindings instead but then they would need to be public
+        std::vector<Eigen::MatrixXd> return_codes(){
+            std::vector<Eigen::MatrixXd> codes; 
+
+            for (int idx = 0; idx < layers.size(); idx++){
+                if (layers[idx]->has_codes == true){
+                    codes.push_back(layers[idx]->codes);
+                }
+            }
+            return codes;
+        }
+
+        void set_codes(std::vector<nb::DRef<Eigen::MatrixXd>> codes){
+            int y = 0 ;
+            for (int idx = 0; idx < layers.size(); idx++){
+                if (layers[idx]->has_codes == true){
+                    layers[idx]->codes = codes[y];
+                    y+=1;
+                }
+               
+            }
+        }
+
+        std::vector<Eigen::MatrixXd> return_weights(){
+            std::vector<Eigen::MatrixXd> weights_vec; 
+
+            for (int idx = 0; idx < layers.size(); idx++){
+                switch(layers[idx]->layer){
+                    case(Layer::layer_type::linear):
+                        weights_vec.push_back(layers[idx]->weight);
+                        break;
+                    default:
+                        continue;
+                }
+            }
+            return weights_vec;
+        }
+
+        std::vector<Eigen::VectorXd> return_bias(){
+            std::vector<Eigen::VectorXd> bias_vec; 
+
+            for (int idx = 0; idx < layers.size(); idx++){
+                switch(layers[idx]->layer){
+                    case(Layer::layer_type::linear):
+                        bias_vec.push_back(layers[idx]->bias);
+                        break;
+                    default:
+                        continue;
+                }
+            }
+            return bias_vec;
+        }
+
+        void set_weights_and_biases(std::vector<nb::DRef<Eigen::MatrixXd>> weights, std::vector<nb::DRef<Eigen::VectorXd>> biases){
+            int y = 0 ;
+            for (int x = 0; x < layers.size(); x++){
+                switch(layers[x]->layer){
+                    case(Layer::layer_type::linear):
+                        layers[x]->weight = weights[y];
+                        layers[x]->bias = biases[y];
+                        y+=1;
+                        break;
+                    default:
+                        continue;
+                }
+            }
+        }
+
+        // //Need to work out good name
+        // //This is used in the partial derivatives to calculate the input
+        int calc_matrix_for_derivative(Eigen::Ref<Eigen::MatrixXd> inputs, int idx, int end_idx){            
+            if (idx < end_idx){
+                layers[idx]->forward(inputs, false); 
+            }else{
+                return -1;
+            }
+
+            if( idx+1 < end_idx){
+                layers[idx+1]->forward(layers[idx]->layer_output, false); 
+            }else{
+                return idx;
+            }
+
+            if( idx+2 < end_idx){
+                layers[idx+2]->forward(layers[idx+1]->layer_output, false); 
+            }else{
+                return idx+1;
+            }      
+
+            return idx+2;
+        }
+
+        void differentiate_layer(Eigen::Ref<Eigen::MatrixXd> inputs, int start_idx, int end_idx, bool code_derivative){
+            //Layer &layer = layers[end_idx];
+            int layer_idx;
+            switch(layers[end_idx]->layer){
+                case(Layer::layer_type::relu):
+                    layer_idx = calc_matrix_for_derivative(inputs, start_idx, end_idx);
+                    if (code_derivative){
+                        if (layer_idx == -1){
+                            dL_dc = dL_dout.cwiseProduct(differentiate_ReLU(inputs));
+                        }else{
+                            dL_dc = dL_dout.cwiseProduct(differentiate_ReLU(layers[layer_idx]->layer_output));
+                        }
+                    }else{
+                        if(layer_idx == -1){
+                            dL_dout = dL_dout.cwiseProduct(differentiate_ReLU(inputs));
+                        }else{
+                            dL_dout = dL_dout.cwiseProduct(differentiate_ReLU(layers[layer_idx]->layer_output));
+                        }
+                    }  
+                    break;
+                case(Layer::layer_type::linear):
+                    //code derivative = false means weight deriative
+                    if (code_derivative){
+                        layer_idx = calc_matrix_for_derivative(inputs, start_idx, end_idx);
+                        dL_dout = dL_dout * layers[end_idx]->weight;
+                    }else{
+                        layer_idx = calc_matrix_for_derivative(inputs, start_idx, end_idx);
+                        if(layer_idx == -1){
+                            dL_dW = dL_dout.transpose() * inputs;
+                        }else{
+                            dL_dW = dL_dout.transpose() * layers[layer_idx]->layer_output;
+                        }
+                        dL_db = dL_dout.colwise().sum();
+                    }
+                    break;
+                case(Layer::layer_type::sigmoid):
+                    layer_idx = calc_matrix_for_derivative(inputs, start_idx, end_idx);
+                    dL_dout = dL_dout.cwiseProduct(differentiate_sigmoid(layers[layer_idx]->layer_output));
+                    break;
+            }
+        }
+
+        void calculate_gradients_first_layer(Eigen::MatrixXd data){
+            inputs = data;
+            differentiate_layer(inputs, start_idx+1, end_idx, false);
+           
+            inputs = data;
+            if (end_idx -1 > start_idx){
+                differentiate_layer(inputs, start_idx+1, end_idx-1, false);
+            }
+
+            inputs = data;
+            if (end_idx -2 > start_idx){
+                differentiate_layer(inputs, start_idx+1, end_idx-2, false);
+            }
+
+        }
+
+
+        void calculate_gradients(bool code_derivative){
+             //Copy as relu and sigmoid are in place and don't want to change the codes
+            inputs = layers[start_idx]->codes;
+            differentiate_layer(inputs, start_idx+1, end_idx, code_derivative);
+            
+            inputs = layers[start_idx]->codes;
+            if (end_idx -1 > start_idx){
+                differentiate_layer(inputs, start_idx+1, end_idx-1, code_derivative);
+            }
+
+            inputs = layers[start_idx]->codes;
+            if (end_idx -2 > start_idx){
+                differentiate_layer(inputs, start_idx+1, end_idx-2, code_derivative);
+            }
+
+
+        }
+
+        
+
+        void update_codes(nb::DRef<Eigen::MatrixXd> targets){
+            bool last_layer = true;
+            int idx_last_code;
+            
+            if (loss_fn == NeuralNetwork::loss_function::CrossEntropyLoss){
+                Eigen::VectorXd targets = Eigen::VectorXd {targets.reshaped()};
+            }
+
+            
+            for (auto indexes : code_pairs){
+                start_idx = std::get<0>(indexes);
+                end_idx = std::get<1>(indexes);
+                
+                for (size_t it = 0; it<n_iter_codes; it++){
+                    //reset to 0
+                    dL_dout = dL_dout * 0.0;
+                    dL_dc = dL_dc * 0.0;
                     //Use the code to predic the next code or model output if next layer
-                    inputs = layers[idx].codes;
-                    predict_next_code(inputs, idx+1, end_idx+1);
+                    inputs = layers[start_idx]->codes;
+                    calc_matrix_for_derivative(inputs, start_idx+1, end_idx+1);
                     
                     if (last_layer == true){
-                        dL_dout = (1/mu) * differentiate_BCELoss(outputs, targets);
+                        switch(loss_fn){
+                            case(NeuralNetwork::loss_function::BCELoss):
+                                dL_dout = (1/mu) * differentiate_BCELoss(layers[layers.size()-1]->layer_output, targets);
+                                break;
+                            case(NeuralNetwork::loss_function::MSELoss):
+                                dL_dout = (1/mu) * differentiate_MSELoss(layers[layers.size()-1]->layer_output, targets);
+                                break;
+                            case(NeuralNetwork::loss_function::CrossEntropyLoss):
+                                dL_dout = (1/mu) * differentiate_CrossEntropyLoss(layers[layers.size()-1]->layer_output, targets, layers[layers.size()-1]->layer_output.cols());
+                                break;
+                            default:
+                                std::cout << "Loss not imp yet" << std::endl;
+                                break;
+                        }
                     }else{
-                        dL_dout = differentiate_MSELoss(outputs,layers[idx_last_code].codes);
+                        dL_dout = differentiate_MSELoss(layers[idx_last_code]->layer_output, layers[idx_last_code]->codes);
                     }
                     last_layer=false;
                     
-                    //Copy as relu and sigmoid are in place and don't want to change the codes
-                    inputs = layers[idx].codes;
-                    outputs = outputs * 0.0;
+                   
+                    calculate_gradients(true);
+                    layers[start_idx]->codes = layers[start_idx]->codes - (((1.0 + momentum) * lr_codes) * dL_dc);
 
-                    differentiate_layer_for_codes(inputs, idx+1, end_idx);
-                    
-                    inputs = layers[idx].codes;
-                    outputs = outputs * 0.0;
-                    if (end_idx -1 != idx){
-                        differentiate_layer_for_codes(inputs, idx+1, end_idx-1);
-                    }
+                    idx_last_code = start_idx;
 
-                    inputs = layers[idx].codes;
-                    outputs = outputs * 0.0;
-                    if (end_idx -2 != idx){
-                        differentiate_layer_for_codes(inputs, idx+1, end_idx-2);
-                    }
-
-                    layers[idx].codes = layers[idx].codes - (((1.0 + momentum) * lr_codes) * dL_dc);
-
-                    //
-                    idx_last_code = idx;
-                    dL_dout = dL_dout * 0.0;
-                    dL_dc = dL_dc * 0.0;
-                    outputs = outputs * 0.0;
-                    //Reset dl_dout to 0
                 }
+
+                
 
             }
          
         }
 
-        //data gets changed in place and is used in multiple places so would need to be copied anyway so no point passing a reference.
+        // //data gets changed in place and is used in multiple places so would need to be copied anyway so no point passing a reference.
         void update_weights(nb::DRef<Eigen::MatrixXd> data, nb::DRef<Eigen::MatrixXd> targets){
-            bool last_layer = false;
             bool first_layer = true;
-            int idx_last_code;
-            int end_idx;
-            Eigen::MatrixXd inputs;
-            int start_idx = 0;
-            for (int idx = 0; idx < layers.size() ; idx++){
+            int layer_idx;
+            int tmp;
+            if (loss_fn == NeuralNetwork::loss_function::CrossEntropyLoss){
+                Eigen::VectorXd targets = Eigen::VectorXd {targets.reshaped()};
+            }
 
-                
-                switch(layers[idx].layer){
-                    case(Layer::layer_type::linear):
-                        //Get the id of the next code that had codes or the last layer
-                        end_idx = idx;
-                        break;
-                    default:
-                        continue;
-                }
+            for (auto indexes : weight_pairs){
+                start_idx = std::get<0>(indexes);
+                layer_idx = std::get<1>(indexes);
+                end_idx = std::get<2>(indexes);
+                for (size_t it = 0; it<n_iter_weights; it++){
+                    //reset to 0
+                    dL_dout = dL_dout * 0.0;
+                    dL_dW = dL_dW * 0.0;
+                    dL_db = dL_db * 0.0;
 
-                for (size_t it = 0; it<n_iter; it++){
 
                     // populate outputs
-                    
-                    if (first_layer == false){
-                        inputs = layers[start_idx].codes;
-                    }else{
+                    if (first_layer == true){
                         inputs = data;
+                        calc_matrix_for_derivative(inputs, start_idx, end_idx+1);
+                        dL_dout = differentiate_MSELoss(layers[layer_idx]->layer_output,layers[layer_idx]->codes);
+                       
+                    }else{
+                        inputs = layers[start_idx]->codes;
+                      
+                        calc_matrix_for_derivative(inputs, start_idx+1, end_idx+1);
+                        if (end_idx == (layers.size()-1)){
+                            //dL_dout =  differentiate_BCELoss(outputs, targets);
+                            switch(loss_fn){
+                                case(NeuralNetwork::loss_function::BCELoss):
+                                    dL_dout = differentiate_BCELoss(layers[layers.size()-1]->layer_output, targets);
+                                    break;
+                                case(NeuralNetwork::loss_function::MSELoss):
+                                    dL_dout = differentiate_MSELoss(layers[layers.size()-1]->layer_output, targets);
+                                    break;
+                                case(NeuralNetwork::loss_function::CrossEntropyLoss):
+                                    dL_dout = differentiate_CrossEntropyLoss(layers[layers.size()-1]->layer_output, targets, layers[layers.size()-1]->layer_output.cols());
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }else{
+                            dL_dout = differentiate_MSELoss(layers[layer_idx]->layer_output,layers[layer_idx]->codes);
+                        }
                         
                     }
                     
-                    //std::cout  << "inputs" << inputs << "\n" << std::endl;
-
-                    // if (first_layer = true){
-                    //     predict_next_code(inputs, start_idx, idx+1);
-                    // }else{
-                    //     predict_next_code(inputs, idx+1, end_idx+1);
-                    // }
-
-                    predict_next_code(inputs, start_idx, end_idx+1);
-                    
-                    
-                    if (last_layer == true){
-                        dL_dout =  differentiate_BCELoss(outputs, targets);
+                    //Seperate functions so only have to pass the data if necesseray 
+                    //std::optional may be better
+                    if (first_layer){
+                        calculate_gradients_first_layer(data);
                     }else{
-                        //std::cout << "outputs" << outputs << "\n" << std::endl;
-                        //std::cout << "target" << layers[idx].codes << "\n" << std::endl;
-                        //std::cout << "end_idx" << end_idx << "\n" << std::endl;
-                        dL_dout = differentiate_MSELoss(outputs,layers[idx].codes);
+                        calculate_gradients(false);
                     }
+                  
+                    layers[layer_idx]->adam(dL_dW, dL_db);
 
-                    //std::cout << "dl_dout " << dL_dout << "\n" << std::endl;
-                    
-                    
-                    if (first_layer == false){
-                        inputs = layers[idx].codes;
-                    }else{
-                        //May have to pass as not a ref
-                        inputs = data;
-                        
-                    }
-                    first_layer = false;
-                    outputs = outputs * 0.0;
-
-                    //std::cout << "Inputs " << inputs << "\n" << std::endl;
-                    differentiate_layer_for_weights(inputs, start_idx, end_idx);
-
-            
-                    
-                    inputs = layers[idx].codes;
-                    outputs = outputs * 0.0;
-                    if (end_idx -1 > idx){
-                        differentiate_layer_for_weights(inputs, start_idx, end_idx-1);
-                    }
-
-                    inputs = layers[idx].codes;
-                    outputs = outputs * 0.0;
-                    if (end_idx -2 > idx){
-                        differentiate_layer_for_weights(inputs, start_idx, end_idx-2);
-                    }
-
-                    //std::cout << "dL_dW: " << dL_dW << "\n" << std::endl;
-                    //std::cout << "dL_db: " << dL_db << "\n" << std::endl;
-                    
-                    layers[idx].adam(dL_dW, dL_db);
-
-                   
-
-                    // adam_eigen(weight_ms[idx], weight_vs[idx], weights[idx], dL_dW, lr, init_vals,
-                    // (step + it + 1));
-                    // adam_eigen_bias(bias_ms[idx], bias_vs[idx], biases[idx], dL_db, lr, init_vals,
-                    //         (step + it + 1));
-                    start_idx = idx;
                 }
+                first_layer = false;
+                
 
             }
 
@@ -914,21 +584,26 @@ class NeuralNetwork{
         
 
     private:
-        std::vector<Layer> layers; 
-        Eigen::MatrixXd outputs; 
+        std::vector<std::shared_ptr<Layer>> layers; 
+        std::vector<std::tuple<int,int>> code_pairs;
+        std::vector<std::tuple<int,int,int>> weight_pairs;
         Eigen::MatrixXd dL_dout;
         Eigen::MatrixXd dL_dc;
         Eigen::MatrixXd dL_dW;
         Eigen::VectorXd dL_db;
         Eigen::MatrixXd tmp; 
-        size_t n_iter;
+        Eigen::MatrixXd inputs;
+        size_t n_iter_codes;
+        size_t n_iter_weights;
         double lr_codes;
         double lr_weights;
         double mu; 
         int criterion;
         double momentum = 0.9; 
-        bool forward;
         bool init_momentum_vals;
+        int start_idx;
+        int end_idx;
+        loss_function loss_fn;
         
 };
 
@@ -952,28 +627,15 @@ NB_MODULE(fast_altmin, m) {
     m.def("matrix_in", &matrix_in);
     m.def("matrix_out", &matrix_out);
     m.def("matrix_multiplication", &matrix_multiplication);
-    m.def("update_weights", &update_weights);
-    m.def("update_all_weights", &update_all_weights);
-    m.def("update_codes", &update_codes);
-    m.def("apply_mods", &apply_mods);
     m.def("log_softmax", &log_softmax);
     m.def("negative_log_likelihood", &negative_log_likelihood);
     m.def("cross_entropy_loss", &cross_entropy_loss);
     m.def("differentiate_CrossEntropyLoss", &differentiate_CrossEntropyLoss);
-    m.def("update_codes_CrossEntropyLoss", &update_codes_CrossEntropyLoss);
-    m.def("update_all_weights_CrossEntropyLoss", &update_all_weights_CrossEntropyLoss);
-    nb::class_<Dog>(m, "Dog")
-        .def(nb::init<>())
-        .def(nb::init<const std::string &>())
-        .def("bark", &Dog::bark)
-        .def_rw("name", &Dog::name);
-    m.def("test_tuple", &test_tuple);
 
     nb::class_<Layer> Layer(m, "Layer");
     
-    Layer.def(nb::init<int, int, bool>())
-        .def(nb::init<Layer::layer_type>())
-        .def("initialise_matrices", &Layer::initialise_matrices)
+    Layer.def(nb::init<Layer::layer_type, int, int, int , Eigen::MatrixXd, Eigen::VectorXd , bool>()  )
+        .def(nb::init<Layer::layer_type, int, int>())
         .def("print_info", &Layer::print_info)
         .def("get_codes_for_layer", &Layer::get_codes_for_layer);
 
@@ -984,13 +646,28 @@ NB_MODULE(fast_altmin, m) {
         .value("sigmoid", Layer::layer_type::sigmoid)
         .export_values();
 
-    nb::class_<NeuralNetwork>(m, "NeuralNetwork")
-        .def(nb::init<>())
-        .def("push_back_layer", &NeuralNetwork::push_back_layer)
+
+
+    nb::class_<NeuralNetwork> NeuralNetwork(m, "NeuralNetwork");
+
+    NeuralNetwork.def(nb::init<NeuralNetwork::loss_function, int, int, int>())
+        .def("push_back_lin_layer", &NeuralNetwork::push_back_lin_layer)
+        .def("push_back_non_lin_layer", &NeuralNetwork::push_back_non_lin_layer)
+        .def("construct_pairs", &NeuralNetwork::construct_pairs)
         .def("print_info", &NeuralNetwork::print_info)
         .def("get_codes", &NeuralNetwork::get_codes)
         .def("return_codes", &NeuralNetwork::return_codes)
+        .def("return_weights", &NeuralNetwork::return_weights)
+        .def("return_bias", &NeuralNetwork::return_bias)
+        .def("set_codes", &NeuralNetwork::set_codes)
+        .def("set_weights_and_biases", &NeuralNetwork::set_weights_and_biases)
         .def("update_codes", &NeuralNetwork::update_codes)
         .def("update_weights", &NeuralNetwork::update_weights);
+
+    nb::enum_<NeuralNetwork::loss_function>(NeuralNetwork, "loss_function")
+        .value("BCELoss", NeuralNetwork::loss_function::BCELoss)
+        .value("MSELoss", NeuralNetwork::loss_function::MSELoss)
+        .value("CrossEntropyLoss", NeuralNetwork::loss_function::CrossEntropyLoss)
+        .export_values();
        
 }

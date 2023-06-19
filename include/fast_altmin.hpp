@@ -172,13 +172,13 @@ void softmax(nb::DRef<Eigen::MatrixXd> input){
 
 }
 
-Eigen::MatrixXd one_hot_encoding(const nb::DRef<Eigen::VectorXi> &input, int num_classes){
+Eigen::MatrixXd one_hot_encoding(const nb::DRef<Eigen::VectorXd> &input, int num_classes){
     int N = input.rows();
     int M = num_classes;
     Eigen::MatrixXd res(N, M);
     for (int i = 0; i < N; i++){
         for (int j = 0; j<M ; j++){
-            if (input[i] == j){
+            if (static_cast<int>(input[i]) == j){
                 res(i,j) = 1;
             }else{
                 res(i,j) = 0;
@@ -254,7 +254,7 @@ Eigen::MatrixXd differentiate_MSELoss(const nb::DRef<Eigen::MatrixXd> &output,
 }
 
 Eigen::MatrixXd differentiate_CrossEntropyLoss(nb::DRef<Eigen::MatrixXd> output,
-                                      const nb::DRef<Eigen::VectorXi> &target, int num_classes){
+                                      const nb::DRef<Eigen::VectorXd> &target, int num_classes){
     softmax(output);
     return (output- one_hot_encoding(target, num_classes))/output.rows();
 }

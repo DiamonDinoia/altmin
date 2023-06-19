@@ -10,5 +10,4 @@ src/fast_altmin.egg-info/SOURCES.txt
 src/fast_altmin.egg-info/dependency_links.txt
 src/fast_altmin.egg-info/not-zip-safe
 src/fast_altmin.egg-info/top_level.txt
-tests/tests.py
 tests/tests_class.py
