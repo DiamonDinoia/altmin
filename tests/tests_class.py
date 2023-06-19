@@ -239,7 +239,7 @@ class TestUpdateFunctions(unittest.TestCase):
 
         neural_network = conv_model_to_class(model, nn.BCELoss(), in_tensor.size(0))
         output_python, codes_python = get_codes(model, in_tensor)
-        output_cpp = neural_network.get_codes(in_tensor)
+        output_cpp = neural_network.get_codes(in_tensor, True)
         codes_cpp = neural_network.return_codes() 
 
         #Check output 
@@ -285,7 +285,6 @@ class TestUpdateFunctions(unittest.TestCase):
         print(codes_cpp)
         print(codes_python)
         for x in range(len(codes_cpp)):
-            if x == 0:continue
             check_equal(codes_cpp[x], codes_python[x], 10e6)
             print("correct")
 
@@ -325,7 +324,7 @@ class TestUpdateFunctions(unittest.TestCase):
         
         # Assert codes are same
         for x in range(len(codes_cpp)):
-            check_equal(codes_python[x], codes_cpp[x], 10e8)
+            check_equal(codes_python[x], codes_cpp[x], 10e6)
    
 
 
@@ -402,11 +401,85 @@ class TestUpdateFunctions(unittest.TestCase):
         check_equal_weights_and_bias(model_python, weights, biases, 10e6)
 
 
+from log_approximator import LogApproximator, test_set, test_nn, run_altmin, run_cpp_altmin, show_res
+import time
+import numpy as np
+class TestConvergence(unittest.TestCase):
 
+    def test_log_approx(self):
+        criterion = nn.MSELoss()
+        X = np.arange(0.0,10.0,0.1)
+        #Avoid divide by 0
+        X = X[1:]
+        X = X.reshape(99,1)
+        Y = np.log(X)
+        epochs = 150
 
+        model = LogApproximator()
+        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.001})
+        model[-1].optimizer.param_groups[0]['lr'] = 0.001
+        model = model[1:]
+        start = time.time()
+        loss_altmin, outputs_altmin = run_altmin(model, X, Y, epochs)
+        end = time.time()
+        time_altmin = end-start 
+        print("Time for altmin :" + str(time_altmin))
+
+        model = LogApproximator()
+        model = get_mods(model)
+        model = model[1:]
+        neural_network = conv_model_to_class(model, nn.MSELoss(),  1, 1, 0.001)
+        start = time.time()
+        loss_cpp, outputs_cpp = run_cpp_altmin(neural_network, X, Y, epochs)
+        end = time.time()
+        time_cpp = end-start
+        print("Time for cpp :" + str(time_cpp))
+
+        #Optional but prints res and how loss changes
+        show_res(X, Y, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp)
+
+# def save_state_to_dict(file_path):
+#     model = simpleNN(2, [4,3],1)
+#     model = get_mods(model)
+#     model = model[1:]
+#     params = model.state_dict()
+#     neural_network = conv_model_to_class(model, nn.BCELoss(), 4)
+#     weights = neural_network.return_weights()
+#     biases = neural_network.return_bias()
+
+#     print(params)
+#     x = 0
+#     y = 0
+#     for key in params:
+#         if 'weight' in key:
+#             params[key]  = weights[x]
+#             x+=1
+#         else:
+#             params[key] = biases[y]
+#             y+=1
+
+#     torch.save(model.state_dict(), "models.test.pt")
+    
+
+# def initialise_state_from_dict():
+#     model = simpleNN(2, [4,3],1)
+#     model = get_mods(model)
+#     model = model[1:]
+#     neural_network = conv_model_to_class(model, nn.BCELoss(), 4)
+#     params = torch.load("models/test.pt")
+    
+#     weights = [] 
+#     biases = []
+#     for key in params:
+#         if 'weight' in key:
+#             weights.append(params[key])
+#         else:
+#             biases.append(params[key])
+
+#     neural_network.set_weights_and_biases(weights,biases)
+        
                 
    
   
 if __name__ == '__main__':
     unittest.main()
-    

@@ -56,7 +56,7 @@ class Layer{
             relu, linear, sigmoid
         };
 
-        Layer(layer_type layer_type, int batch_size, int n, int m, Eigen::MatrixXd weight, Eigen::VectorXd bias , bool  has_codes){
+        Layer(layer_type layer_type, int batch_size, int n, int m, Eigen::MatrixXd weight, Eigen::VectorXd bias , bool  has_codes, double lr){
             this->weight = weight;
             this->bias = bias;
             weight_m = Eigen::MatrixXd::Zero(n,m);
@@ -74,15 +74,16 @@ class Layer{
             layer = linear;
             this->has_codes = has_codes;
             init_vals = true;
-            lr = 0.008;
+            this->lr = lr;
             beta_1 = 0.9;
             beta_2 = 0.999;
             eps    = 1e-08;
             step = 1;
         }
-        Layer(layer_type type, int batch_size, int n){
+        Layer(layer_type type, int batch_size, int n, double lr){
             layer = type;
             this->has_codes = false;
+            this-> lr = lr;
             layer_output = Eigen::MatrixXd(batch_size,n);
             dL_dout = Eigen::MatrixXd(batch_size,n);
         }
@@ -205,10 +206,10 @@ class NeuralNetwork{
         };
 
         //Setup construtor properly later 
-        NeuralNetwork(loss_function loss_fn, int n_iter_weights, int batch_size, int m){
+        NeuralNetwork(loss_function loss_fn, int n_iter_weights, int batch_size, int m, double lr_codes){
             n_iter_codes = 1;
             this->n_iter_weights = n_iter_weights;
-            lr_codes = 0.3;
+            this->lr_codes = lr_codes;
             mu = 0.003;
             momentum = 0.9;
             //This will also be an enum in the future
@@ -219,17 +220,17 @@ class NeuralNetwork{
         }
 
 
-        void push_back_non_lin_layer(Layer::layer_type layer_type, int batch_size, int n){
+        void push_back_non_lin_layer(Layer::layer_type layer_type, int batch_size, int n, double lr){
             //Have to be shared not unique as python needs access to them as well
             //https://github.com/pybind/pybind11/issues/115
             //maybe nanobind has fixed this by now but I couldn't make it work
-            std::shared_ptr<Layer> layer_ptr = std::make_shared<Layer>(Layer(layer_type, batch_size, n));
+            std::shared_ptr<Layer> layer_ptr = std::make_shared<Layer>(Layer(layer_type, batch_size, n, lr));
             layers.push_back(std::move(layer_ptr));
         }
 
         void push_back_lin_layer(Layer::layer_type layer_type, int batch_size, int n, int m, nb::DRef<Eigen::MatrixXd> weight,
-            nb::DRef<Eigen::VectorXd> bias , bool  has_codes){
-            std::shared_ptr<Layer> layer_ptr = std::make_shared<Layer>(Layer(layer_type, batch_size, n, m, weight, bias, has_codes));
+            nb::DRef<Eigen::VectorXd> bias , bool  has_codes,  double lr){
+            std::shared_ptr<Layer> layer_ptr = std::make_shared<Layer>(Layer(layer_type, batch_size, n, m, weight, bias, has_codes, lr));
             layers.push_back(std::move(layer_ptr));
             
         }
@@ -276,12 +277,12 @@ class NeuralNetwork{
            
         }
 
-
-        Eigen::MatrixXd get_codes(nb::DRef<Eigen::MatrixXd> inputs_nb){
+        //If update_codes=false in evaluation mode and the codes aren't being updated
+        Eigen::MatrixXd get_codes(nb::DRef<Eigen::MatrixXd> inputs_nb, bool update_codes){
             inputs = inputs_nb;
-            layers[0]->forward(inputs, true);
+            layers[0]->forward(inputs, update_codes);
             for (int idx = 1 ; idx< layers.size(); idx++){
-                layers[idx]->forward(layers[idx-1]->layer_output, true);
+                layers[idx]->forward(layers[idx-1]->layer_output, update_codes);
             }
             return layers[layers.size()-1]->layer_output;
         }
@@ -634,8 +635,8 @@ NB_MODULE(fast_altmin, m) {
 
     nb::class_<Layer> Layer(m, "Layer");
     
-    Layer.def(nb::init<Layer::layer_type, int, int, int , Eigen::MatrixXd, Eigen::VectorXd , bool>()  )
-        .def(nb::init<Layer::layer_type, int, int>())
+    Layer.def(nb::init<Layer::layer_type, int, int, int , Eigen::MatrixXd, Eigen::VectorXd , bool, double>()  )
+        .def(nb::init<Layer::layer_type, int, int, double>())
         .def("print_info", &Layer::print_info)
         .def("get_codes_for_layer", &Layer::get_codes_for_layer);
 
@@ -650,7 +651,7 @@ NB_MODULE(fast_altmin, m) {
 
     nb::class_<NeuralNetwork> NeuralNetwork(m, "NeuralNetwork");
 
-    NeuralNetwork.def(nb::init<NeuralNetwork::loss_function, int, int, int>())
+    NeuralNetwork.def(nb::init<NeuralNetwork::loss_function, int, int, int, double>())
         .def("push_back_lin_layer", &NeuralNetwork::push_back_lin_layer)
         .def("push_back_non_lin_layer", &NeuralNetwork::push_back_non_lin_layer)
         .def("construct_pairs", &NeuralNetwork::construct_pairs)
