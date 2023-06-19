@@ -44,6 +44,8 @@ foreach(CXX_STANDARD_VAR 23;20;17)
 endforeach()
 endif()
 
+
+
 set(FLAGS_DEBUG -O0 -fstack-protector-all -Wall -Wextra -pedantic -fno-inline)
 set(FLAGS_RELEASE -O3 -ffp-contract=fast -freciprocal-math
         -fmerge-all-constants -fno-math-errno -march=native -funroll-loops
@@ -71,6 +73,9 @@ function(target_add_compilation_flags target)
         endif ()
     endif ()
 endfunction()
+
+#Not for production 
+add_definitions(-w)
 
 # version of the libraries to be used
 set(CPM_DOWNLOAD_VERSION 0.38.1)
@@ -113,15 +118,15 @@ if(Eigen_ADDED)
   target_include_directories(Eigen INTERFACE ${Eigen_SOURCE_DIR})
 endif()
 
-CPMAddPackage(
-        NAME gsl
-        GITHUB_REPOSITORY ampl/gsl
-        VERSION 2.7.0
-        GIT_SHALLOW YES
-        GIT_PROGRESS YES
-        EXCLUDE_FROM_ALL YES
-        SYSTEM YES
-)
+# CPMAddPackage(
+#         NAME gsl
+#         GITHUB_REPOSITORY ampl/gsl
+#         VERSION 2.7.0
+#         GIT_SHALLOW YES
+#         GIT_PROGRESS YES
+#         EXCLUDE_FROM_ALL YES
+#         SYSTEM YES
+# )
 
 
 CPMAddPackage(
@@ -149,21 +154,18 @@ CPMAddPackage(
 #     set_property(GLOBAL PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH_LIST}")
 # endif()
 
-set(CMAKE_CUDA_ARCHITECTURES native)
-
-execute_process(COMMAND python -c "import torch;print(torch.utils.cmake_prefix_path)"
-    OUTPUT_VARIABLE TORCH_CMAKE_PREFIX_PATH)
-string(REGEX REPLACE "\n$" "" TORCH_CMAKE_PREFIX_PATH "${TORCH_CMAKE_PREFIX_PATH}")
-set(Torch_DIR ${TORCH_CMAKE_PREFIX_PATH}/Torch)
-
-message(STATUS "Torch_DIR ${Torch_DIR}")
-set(CAFFE2_USE_CUDA OFF)
-find_package(Torch REQUIRED)
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+# Atm have libtorch in github so downloaded as part of package instead of only wokring with cuda
+# And ideally torch is removed anyway so not worth spending time on rn.
+# list(APPEND CMAKE_PREFIX_PATH "libtorch")
+# find_package(Torch REQUIRED)
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 nanobind_add_module(fast_altmin src/fast_altmin.cpp)
 
 target_include_directories(fast_altmin PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_link_libraries(fast_altmin PRIVATE Eigen gsl "${TORCH_LIBRARIES}")
+#target_link_libraries(fast_altmin PRIVATE Eigen gsl "${TORCH_LIBRARIES}")
+target_link_libraries(fast_altmin PRIVATE Eigen)
 
 install(TARGETS fast_altmin LIBRARY DESTINATION .)
 
