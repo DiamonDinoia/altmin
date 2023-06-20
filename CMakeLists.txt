@@ -13,6 +13,8 @@ if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_BINARY_DIR})
   message(FATAL_ERROR "in-source build detected")
 endif()
 
+option(ALTMIN_ENABLE_LTO "Enables link time optimisation" ON)
+
 cmake_minimum_required(VERSION 3.18...3.26)
 project(fast_altmin LANGUAGES CXX)
 
@@ -44,8 +46,6 @@ foreach(CXX_STANDARD_VAR 23;20;17)
 endforeach()
 endif()
 
-
-
 set(FLAGS_DEBUG -O0 -fstack-protector-all -Wall -Wextra -pedantic -fno-inline)
 set(FLAGS_RELEASE -O3 -ffp-contract=fast -freciprocal-math
         -fmerge-all-constants -fno-math-errno -march=native -funroll-loops
@@ -74,8 +74,26 @@ function(target_add_compilation_flags target)
     endif ()
 endfunction()
 
-#Not for production 
-add_definitions(-w)
+include(CheckIPOSupported)
+check_ipo_supported(RESULT supported OUTPUT error)
+if (supported)
+    if (POLICY CMP0069)
+        cmake_policy(SET CMP0069 NEW)
+        set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+    endif ()
+    message(STATUS "IPO / LTO enabled")
+else ()
+    message(STATUS "IPO / LTO not supported: <${error}>")
+endif ()
+
+function(enable_lto target)
+    if (supported)
+        set_target_properties(${target} PROPERTIES INTERPROCEDURAL_OPTIMIZATION ${ALTMIN_ENABLE_LTO})
+    else ()
+        message(WARNING "IPO / LTO not supported: <${error}>")
+    endif ()
+endfunction()
+
 
 # version of the libraries to be used
 set(CPM_DOWNLOAD_VERSION 0.38.1)
@@ -118,17 +136,6 @@ if(Eigen_ADDED)
   target_include_directories(Eigen INTERFACE ${Eigen_SOURCE_DIR})
 endif()
 
-# CPMAddPackage(
-#         NAME gsl
-#         GITHUB_REPOSITORY ampl/gsl
-#         VERSION 2.7.0
-#         GIT_SHALLOW YES
-#         GIT_PROGRESS YES
-#         EXCLUDE_FROM_ALL YES
-#         SYSTEM YES
-# )
-
-
 CPMAddPackage(
         NAME nanobind
         GIT_REPOSITORY https://github.com/wjakob/nanobind
@@ -139,36 +146,26 @@ CPMAddPackage(
         SYSTEM YES
 )
 
-# if(${CMAKE_VERSION} VERSION_LESS_EQUAL "3.13.4")
-#     cuda_select_nvcc_arch_flags(ARCH_FLAGS "Auto") # optional argument for arch to add
-#     message("ARCH_FLAGS = ${ARCH_FLAGS}")
-#     string(REPLACE "-gencode;" "--generate-code=" ARCH_FLAGS "${ARCH_FLAGS}")
-#     string(APPEND CMAKE_CUDA_FLAGS "${ARCH_FLAGS}")
-# else()
-#     include(FindCUDA/select_compute_arch)
-#     CUDA_DETECT_INSTALLED_GPUS(INSTALLED_GPU_CCS_1)
-#     string(STRIP "${INSTALLED_GPU_CCS_1}" INSTALLED_GPU_CCS_2)
-#     string(REPLACE " " ";" INSTALLED_GPU_CCS_3 "${INSTALLED_GPU_CCS_2}")
-#     string(REPLACE "." "" CUDA_ARCH_LIST "${INSTALLED_GPU_CCS_3}")
-#     SET(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH_LIST})
-#     set_property(GLOBAL PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH_LIST}")
-# endif()
-
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
-# Atm have libtorch in github so downloaded as part of package instead of only wokring with cuda
-# And ideally torch is removed anyway so not worth spending time on rn.
-# list(APPEND CMAKE_PREFIX_PATH "libtorch")
-# find_package(Torch REQUIRED)
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 nanobind_add_module(fast_altmin src/fast_altmin.cpp)
-
 target_include_directories(fast_altmin PRIVATE ${CMAKE_SOURCE_DIR}/include)
-#target_link_libraries(fast_altmin PRIVATE Eigen gsl "${TORCH_LIBRARIES}")
 target_link_libraries(fast_altmin PRIVATE Eigen)
 
-install(TARGETS fast_altmin LIBRARY DESTINATION .)
+find_package(OpenMP)
 
+if(OpenMP_CXX_FOUND)
+    message(STATUS "OpenMP found")
+    list(APPEND FLAGS ${OpenMP_CXX_FLAGS})
+    target_link_libraries(fast_altmin PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
+target_add_compilation_flags(fast_altmin)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    enable_lto(fast_altmin)
+endif()
+
+install(TARGETS fast_altmin LIBRARY DESTINATION .)
 
 if(ALTMIN_BUILD_TESTS)
     add_subdirectory(tests)
