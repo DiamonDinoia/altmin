@@ -335,7 +335,7 @@ class NeuralNetwork{
             return layers[layers.size()-1]->layer_output;
         }
 
-        // I Need to change /////////////////////////////////////////////////////////////////////////////////
+        // I Need to change ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         std::vector<Eigen::MatrixXd> return_codes(){
             std::vector<Eigen::MatrixXd> codes; 
 
@@ -512,7 +512,7 @@ class NeuralNetwork{
             apply_chain_rule(code_derivative);
     
         }
-
+        
         
         //Update the codes
         void update_codes(nb::DRef<Eigen::MatrixXd> targets){
@@ -540,13 +540,13 @@ class NeuralNetwork{
                     if (last_layer == true){
                         switch(loss_fn){
                             case(NeuralNetwork::loss_function::BCELoss):
-                                dL_dout = (1/mu) * differentiate_BCELoss(layers[layers.size()-1]->layer_output, targets);
+                                dL_dout = (1/mu) * differentiate_BCELoss(layers[end_idx]->layer_output, targets);
                                 break;
                             case(NeuralNetwork::loss_function::MSELoss):
-                                dL_dout = (1/mu) * differentiate_MSELoss(layers[layers.size()-1]->layer_output, targets);
+                                dL_dout = (1/mu) * differentiate_MSELoss(layers[end_idx]->layer_output, targets);
                                 break;
                             case(NeuralNetwork::loss_function::CrossEntropyLoss):
-                                dL_dout = (1/mu) * differentiate_CrossEntropyLoss(layers[layers.size()-1]->layer_output, class_labels, layers[layers.size()-1]->layer_output.cols());
+                                dL_dout = (1/mu) * differentiate_CrossEntropyLoss(layers[end_idx]->layer_output, class_labels, layers[end_idx]->layer_output.cols());
                                 break;
                             default:
                                 std::cout << "Loss not imp yet" << std::endl;
@@ -577,6 +577,7 @@ class NeuralNetwork{
                 class_labels = Eigen::VectorXd {targets.reshaped()};
             }
 
+            //Can use the weight pairs to do the code inside the loop in parallel
             for (auto indexes : weight_pairs){
                 start_idx = std::get<0>(indexes);
                 layer_idx = std::get<1>(indexes);
@@ -602,13 +603,13 @@ class NeuralNetwork{
                             //dL_dout =  differentiate_BCELoss(outputs, targets);
                             switch(loss_fn){
                                 case(NeuralNetwork::loss_function::BCELoss):
-                                    dL_dout = differentiate_BCELoss(layers[layers.size()-1]->layer_output, targets);
+                                    dL_dout = differentiate_BCELoss(layers[end_idx]->layer_output, targets);
                                     break;
                                 case(NeuralNetwork::loss_function::MSELoss):
-                                    dL_dout = differentiate_MSELoss(layers[layers.size()-1]->layer_output, targets);
+                                    dL_dout = differentiate_MSELoss(layers[end_idx]->layer_output, targets);
                                     break;
                                 case(NeuralNetwork::loss_function::CrossEntropyLoss):
-                                    dL_dout = differentiate_CrossEntropyLoss(layers[layers.size()-1]->layer_output, class_labels, layers[layers.size()-1]->layer_output.cols());
+                                    dL_dout = differentiate_CrossEntropyLoss(layers[end_idx]->layer_output, class_labels, layers[end_idx]->layer_output.cols());
                                     break;
                                 default:
                                     break;
