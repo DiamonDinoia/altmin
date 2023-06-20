@@ -13,18 +13,18 @@ import time
 
 
 class LogApproximator(nn.Module):
-    def __init__(self):
+    def __init__(self, n_hidden):
         super(LogApproximator, self).__init__()
 
         self.features = ()
         self.classifier = nn.Sequential()
-        self.classifier.add_module("-1", nn.Linear(1,100))
-        self.classifier.add_module("0", nn.ReLU())
-        self.classifier.add_module("1",nn.Linear(100,100)) 
-        self.classifier.add_module("2",nn.ReLU()) 
-        self.classifier.add_module("3",nn.Linear(100,100)) 
-        self.classifier.add_module("4",nn.ReLU()) 
-        self.classifier.add_module("5",nn.Linear(100,1)) 
+        self.classifier.add_module("0", nn.Linear(1,n_hidden))
+        self.classifier.add_module("1", nn.ReLU())
+        self.classifier.add_module("2",nn.Linear(n_hidden,n_hidden)) 
+        self.classifier.add_module("3",nn.ReLU()) 
+        self.classifier.add_module("4",nn.Linear(n_hidden,n_hidden)) 
+        self.classifier.add_module("5",nn.ReLU()) 
+        self.classifier.add_module("6",nn.Linear(n_hidden,1)) 
         self.classifier.double()
     def forward(self, x):
         x = self.classifier(x)
@@ -87,13 +87,14 @@ def run_altmin(model, X, Y, epochs):
                 outputs, codes = get_codes(model, data)
 
             
-            codes = update_codes(codes, model, targets, criterion, 0.003, lambda_c=0, n_iter=1, lr=0.001)
+            codes = update_codes(codes, model, targets, nn.MSELoss(), 0.003, lambda_c=0, n_iter=1, lr=0.001)
 
-            update_last_layer_(model[-1], codes[-1], targets, criterion, n_iter=1)
+            update_last_layer_(model[-1], codes[-1], targets, nn.MSELoss(), n_iter=1)
 
             update_hidden_weights_adam_(model, data, codes, lambda_w=0, n_iter=1)
         loss = test_set(model).item() 
         losses.append(loss)
+        print("Epoch "+str(epoch) + " loss"+ str(loss))
     outputs = model(torch.tensor(np.array(X)).double())
     return losses, outputs
 
@@ -110,6 +111,7 @@ def run_cpp_altmin(neural_network, X, Y, epochs):
             neural_network.update_weights(data,targets)
         loss = test_nn(neural_network).item() 
         losses.append(loss)
+        print("Epoch "+str(epoch) + " loss"+ str(loss))
     outputs = neural_network.get_codes(torch.tensor(np.array(X)).double(),False)
     return losses, outputs
 
@@ -130,42 +132,37 @@ def show_res(X, Y, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp):
     plt.show()
 
 
-criterion = nn.MSELoss()
-X = np.arange(0.0,10.0,0.1)
-#Avoid divide by 0
-X = X[1:]
-X = X.reshape(99,1)
-Y = np.log(X)
-epochs = 150
+def main():
+    X = np.arange(0.0,10.0,0.1)
+    #Avoid divide by 0
+    X = X[1:]
+    X = X.reshape(99,1)
+    Y = np.log(X)
+    epochs = 300
 
-# model = LogApproximator()
-# model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.001})
-# model[-1].optimizer.param_groups[0]['lr'] = 0.001
-# model = model[1:]
-# start = time.time()
-# loss_sgd, outputs_sgd = sgd(model, X, Y, epochs)
-# end = time.time()
-# time_sgd = end-start
-# print("Time for sgd :" + str(time_sgd))
 
-model = LogApproximator()
-model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.001})
-model[-1].optimizer.param_groups[0]['lr'] = 0.001
-model = model[1:]
-start = time.time()
-loss_altmin, outputs_altmin = run_altmin(model, X, Y, epochs)
-end = time.time()
-time_altmin = end-start 
-print("Time for altmin :" + str(time_altmin))
 
-model = LogApproximator()
-model = get_mods(model)
-model = model[1:]
-neural_network = conv_model_to_class(model, nn.MSELoss(),  1, 1, 0.001)
-start = time.time()
-loss_cpp, outputs_cpp = run_cpp_altmin(neural_network, X, Y, epochs)
-end = time.time()
-time_cpp = end-start
-print("Time for cpp :" + str(time_cpp))
+    model = LogApproximator(100)
+    model = get_mods(model)
+    model = model[1:]
+    neural_network = conv_model_to_class(model, nn.MSELoss(),  1, 1, 1, 0.001, 0.003, 0.9, 0.001)
+    start = time.time()
+    loss_cpp, outputs_cpp = run_cpp_altmin(neural_network, X, Y, epochs)
+    end = time.time()
+    time_cpp = end-start
+    print("Time for cpp :" + str(time_cpp))
 
-show_res(X, Y, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp)
+
+    model = LogApproximator(100)
+    model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.001})
+    model[-1].optimizer.param_groups[0]['lr'] = 0.001
+    model = model[1:]
+    start = time.time()
+    loss_altmin, outputs_altmin = run_altmin(model, X, Y, epochs)
+    end = time.time()
+    time_altmin = end-start 
+    print("Time for altmin :" + str(time_altmin))
+
+
+
+    show_res(X, Y, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp)

@@ -8,13 +8,16 @@ import fast_altmin
 import unittest
 
 #These two functions need to be moved to control flow
-def conv_model_to_class(model, criterion, batch_size, n_iter_weights=5, lr_codes=0.3, lr =0.008):
+def conv_model_to_class(model, criterion, batch_size, n_iter_codes = 1, n_iter_weights=5, lr_codes=0.3, mu=0.003, momentum = 0.9, lr =0.008):
     if isinstance(criterion, nn.BCELoss):
-        neural_network = fast_altmin.NeuralNetwork(fast_altmin.NeuralNetwork.BCELoss, n_iter_weights, batch_size, model[0].weight.size(1), lr_codes)
+        neural_network = fast_altmin.NeuralNetwork(fast_altmin.NeuralNetwork.BCELoss, n_iter_codes, n_iter_weights, 
+                                                   batch_size, model[0].weight.size(1), lr_codes, mu, momentum)
     elif isinstance(criterion, nn.MSELoss):
-        neural_network = fast_altmin.NeuralNetwork(fast_altmin.NeuralNetwork.MSELoss, n_iter_weights, batch_size, model[0].weight.size(1), lr_codes)
+        neural_network = fast_altmin.NeuralNetwork(fast_altmin.NeuralNetwork.MSELoss, n_iter_codes, n_iter_weights, 
+                                                   batch_size, model[0].weight.size(1), lr_codes, mu, momentum)
     elif isinstance(criterion, nn.CrossEntropyLoss):
-        neural_network = fast_altmin.NeuralNetwork(fast_altmin.NeuralNetwork.CrossEntropyLoss, n_iter_weights, batch_size, model[0].weight.size(1), lr_codes)
+        neural_network = fast_altmin.NeuralNetwork(fast_altmin.NeuralNetwork.CrossEntropyLoss, n_iter_codes, n_iter_weights,
+                                                    batch_size, model[0].weight.size(1), lr_codes, mu, momentum)
     else:
         print("loss not imp yet")
 
@@ -24,7 +27,6 @@ def conv_model_to_class(model, criterion, batch_size, n_iter_weights=5, lr_codes
 
 
 def create_model_class(model, neural_network, batch_size, n,  has_codes = True, lr=0.008):
-    #print(model)
     for mod in model:
         #print(mod)
         if isinstance(mod, nn.ReLU):
@@ -35,7 +37,7 @@ def create_model_class(model, neural_network, batch_size, n,  has_codes = True, 
         elif isinstance(mod, nn.Sigmoid):
             neural_network.push_back_non_lin_layer(fast_altmin.Layer.sigmoid, batch_size, n, lr)
         elif isinstance(mod, nn.Sequential):
-            create_model_class(mod, neural_network, batch_size, n, False)
+            create_model_class(mod, neural_network, batch_size, n, False, lr)
         else:
             print("layer not imp yet")
     
