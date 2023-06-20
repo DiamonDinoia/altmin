@@ -1,17 +1,17 @@
-#include <math.h>
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
-// #include <torch/torch.h>
 
+#include <cmath>
 #include <iostream>
 #include <vector>
 
-namespace nb = nanobind;
+#define ALTMIN_INLINE inline __attribute__((always_inline))
 
 ////////////////////////////////////////////////////////////////////////////////////////
+
 
 // No functions from in here actually used atm as this is mostly eigen stuff
 // ////////////
@@ -24,54 +24,49 @@ namespace nb = nanobind;
 // Eigen::RowMajor>> &weight doesn't change the order of the data as a
 // referenced is passed to the data And it's quicker to transpose the data here
 // than in cpp But i'll come nack to this at the end
-Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> lin(
-    const nb::DRef<Eigen::MatrixXd> &input,
-    const nb::DRef<Eigen::MatrixXd> &weight,
-    const nb::DRef<Eigen::VectorXd> &bias) {
+ALTMIN_INLINE Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> lin(
+        const nanobind::DRef<Eigen::MatrixXd> &input,
+        const nanobind::DRef<Eigen::MatrixXd> &weight,
+        const nanobind::DRef<Eigen::VectorXd> &bias) noexcept {
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> res =
-        (input * weight.transpose());
-    for (size_t i = 0; i < res.rows(); ++i) { res.row(i) += bias; }
+            (input * weight.transpose());
+    for (long i = 0; i < res.rows(); ++i) { res.row(i) += bias; }
     return res;
 }
 
-Eigen::MatrixXd ReLU(nb::DRef<Eigen::MatrixXd> input) {
-    int             N = input.rows();
-    int             M = input.cols();
-    Eigen::MatrixXd res(N, M);
-
-    for (size_t i = 0; i < N; ++i) {
-        for (size_t j = 0; j < M; ++j) {
-            res(i, j) = std::max(input(i, j), 0.0);
-        }
-    }
-    return res;
-}
 
 // Maybe should iterate in the opposite direction as should go in storage order
 // but again I'll come back to this
 // Also note the reference to the data is passed and the data is changed in
 // place so nothing returned
-void ReLU_inplace(nb::DRef<Eigen::MatrixXd> input) {
-    int N = input.rows();
-    int M = input.cols();
-    for (size_t i = 0; i < N; ++i) {
-        for (size_t j = 0; j < M; ++j) {
+ALTMIN_INLINE void ReLU_inplace(nanobind::DRef<Eigen::MatrixXd> input) noexcept {
+    const auto N = input.rows();
+    const auto M = input.cols();
+    for (auto i = 0L; i < N; ++i) {
+        for (auto j = 0L; j < M; ++j) {
             input(i, j) = std::max(input(i, j), 0.0);
         }
     }
-    return;
 }
+
+ALTMIN_INLINE Eigen::MatrixXd ReLU(const nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
+    Eigen::MatrixXd res = input;
+    ReLU_inplace(res);
+    return res;
+}
+
+
 
 // Maybe should iterate in the opposite direction as should go in storage order
 // but again I'll come back to this
 // Also note the reference to the data is passed and the data is changed in
 // place so nothing returned
-Eigen::MatrixXd sigmoid(nb::DRef<Eigen::MatrixXd> input) {
-    int             N = input.rows();
-    int             M = input.cols();
+ALTMIN_INLINE Eigen::MatrixXd sigmoid(const nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
+    const auto N = input.rows();
+    const auto M = input.cols();
     Eigen::MatrixXd res(N, M);
-    for (size_t i = 0; i < N; ++i) {
-        for (size_t j = 0; j < M; ++j) {
+    for (auto i = 0l; i < N; ++i) {
+        for (auto j = 0l; j < M; ++j) {
             res(i, j) = 1.0 / (1.0 + std::exp(-input(i, j)));
         }
     }
@@ -82,25 +77,24 @@ Eigen::MatrixXd sigmoid(nb::DRef<Eigen::MatrixXd> input) {
 // but again I'll come back to this
 // Also note the reference to the data is passed and the data is changed in
 // place so nothing returned
-void sigmoid_inplace(nb::DRef<Eigen::MatrixXd> input) {
-    int N = input.rows();
-    int M = input.cols();
-    for (size_t i = 0; i < N; ++i) {
-        for (size_t j = 0; j < M; ++j) {
+ALTMIN_INLINE void sigmoid_inplace(nanobind::DRef<Eigen::MatrixXd> input) noexcept {
+    const auto N = input.rows();
+    const auto M = input.cols();
+    for (auto i = 0l; i < N; ++i) {
+        for (auto j = 0l; j < M; ++j) {
             input(i, j) = 1.0 / (1.0 + std::exp(-input(i, j)));
         }
     }
-    return;
 }
 
-double BCELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
-              const nb::DRef<Eigen::MatrixXd> &targets) {
-    int    N   = predictions.rows();
-    int    M   = predictions.cols();
+ALTMIN_INLINE double BCELoss(const nanobind::DRef<Eigen::MatrixXd> &predictions,
+                             const nanobind::DRef<Eigen::MatrixXd> &targets) noexcept {
+    const auto N = predictions.rows();
+    const auto M = predictions.cols();
     double tot = 0.0;
-    for (size_t i = 0; i < N; ++i) {
+    for (long i = 0; i < N; ++i) {
         double sum = 0.0;
-        for (size_t j = 0; j < M; ++j) {
+        for (long j = 0; j < M; ++j) {
             sum += (targets.row(i)(j) * std::log(predictions.row(i)(j))) +
                    ((1.0 - targets.row(i)(j)) *
                     std::log(1.0 - predictions.row(i)(j)));
@@ -112,14 +106,14 @@ double BCELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
     return tot / static_cast<double>(N);
 }
 
-double MSELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
-              const nb::DRef<Eigen::MatrixXd> &targets) {
-    int    N   = predictions.rows();
-    int    M   = predictions.cols();
+ALTMIN_INLINE double MSELoss(const nanobind::DRef<Eigen::MatrixXd> &predictions,
+                             const nanobind::DRef<Eigen::MatrixXd> &targets) noexcept {
+    const auto N = predictions.rows();
+    const auto M = predictions.cols();
     double tot = 0.0;
-    for (size_t i = 0; i < N; ++i) {
+    for (long i = 0; i < N; ++i) {
         double sum = 0.0;
-        for (size_t j = 0; j < M; ++j) {
+        for (long j = 0; j < M; ++j) {
             sum += (targets(i, j) - predictions(i, j)) *
                    (targets(i, j) - predictions(i, j));
         }
@@ -130,136 +124,123 @@ double MSELoss(const nb::DRef<Eigen::MatrixXd> &predictions,
     return tot / static_cast<double>(N);
 }
 
-void log_softmax(nb::DRef<Eigen::MatrixXd> input){
-    int    N   = input.rows();
-    int    M   = input.cols();
-    double sum_exps = 0.0;
-    
-    for (size_t i = 0; i < N; ++i) {
-        std::vector<double> exps;
-        for (size_t j = 0; j < M; ++j) {
-            exps.push_back(std::exp(input(i,j)));
+ALTMIN_INLINE void log_softmax(nanobind::DRef<Eigen::MatrixXd> input) noexcept {
+    const auto N = input.rows();
+    const auto M = input.cols();
+    // TODO: Probably can be done using eignen instead of std::vector and various loops
+    std::vector<double> exps(M);
+    for (long i = 0; i < N; ++i) {
+        for (long j = 0; j < M; ++j) {
+            exps[j] = std::exp(input(i, j));
         }
-        sum_exps = 0.0;
-        for (auto exp : exps)
+        double sum_exps = 0.0;
+        for (const auto exp: exps) {
             sum_exps += exp;
-
-        for (size_t j = 0; j < M; ++j) {
-            input(i,j) = std::log(exps[j] / sum_exps);
+        }
+        const auto inv_sum_exps = 1.0 / sum_exps;
+        for (long j = 0; j < M; ++j) {
+            input(i, j) = std::log(exps[j] * inv_sum_exps);
         }
     }
 
 }
 
-void softmax(nb::DRef<Eigen::MatrixXd> input){
-    int    N   = input.rows();
-    int    M   = input.cols();
-    double sum_exps = 0.0;
-    
-    for (size_t i = 0; i < N; ++i) {
-        std::vector<double> exps;
-        for (size_t j = 0; j < M; ++j) {
-            exps.push_back(std::exp(input(i,j)));
-        }
-        sum_exps = 0.0;
-        for (auto exp : exps)
-            sum_exps += exp;
+ALTMIN_INLINE void softmax(nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
+    const auto N = input.rows();
+    const auto M = input.cols();
+    std::vector<double> exps(M);
 
-        for (size_t j = 0; j < M; ++j) {
-            input(i,j) =(exps[j] / sum_exps);
+    for (long i = 0; i < N; ++i) {
+        for (long j = 0; j < M; ++j) {
+            exps[j] = std::exp(input(i, j));
+        }
+        double sum_exps = 0.0;
+        for (auto exp: exps) {
+            sum_exps += exp;
+        }
+        const auto inv_sum_exps = 1.0 / sum_exps;
+        for (long j = 0; j < M; ++j) {
+            input(i, j) = (exps[j] * inv_sum_exps);
         }
     }
 
 }
 
-Eigen::MatrixXd one_hot_encoding(const nb::DRef<Eigen::VectorXd> &input, int num_classes){
-    int N = input.rows();
-    int M = num_classes;
+ALTMIN_INLINE Eigen::MatrixXd
+one_hot_encoding(const nanobind::DRef<Eigen::VectorXd> &input, const int num_classes) noexcept {
+    const auto N = input.rows();
+    const auto M = num_classes;
     Eigen::MatrixXd res(N, M);
-    for (int i = 0; i < N; i++){
-        for (int j = 0; j<M ; j++){
-            if (static_cast<int>(input[i]) == j){
-                res(i,j) = 1;
-            }else{
-                res(i,j) = 0;
-            }
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < M; j++) {
+            res(i, j) = static_cast<int>(input[i]) == j;
         }
     }
     return res;
 }
 
-double negative_log_likelihood(const nb::DRef<Eigen::MatrixXd> &log_likelihoods, const nb::DRef<Eigen::VectorXi> &targets){
+ALTMIN_INLINE double negative_log_likelihood(const nanobind::DRef<Eigen::MatrixXd> &log_likelihoods,
+                                             const nanobind::DRef<Eigen::VectorXi> &targets) noexcept {
     double sum = 0.0;
-    for(int i =0 ; i < log_likelihoods.rows(); i++){
-        sum+= log_likelihoods(i,targets(i));
+    for (int i = 0; i < log_likelihoods.rows(); i++) {
+        sum += log_likelihoods(i, targets(i));
     }
-    return (-1.0/log_likelihoods.rows())*sum;
+    return (-1.0 / static_cast<double>(log_likelihoods.rows())) * sum;
 }
 
-double cross_entropy_loss(nb::DRef<Eigen::MatrixXd> input, const nb::DRef<Eigen::VectorXi> &targets){
+ALTMIN_INLINE
+double
+cross_entropy_loss(nanobind::DRef<Eigen::MatrixXd> input, const nanobind::DRef<Eigen::VectorXi> &targets) noexcept {
     log_softmax(input);
     return negative_log_likelihood(input, targets);
 }
 
-Eigen::MatrixXd differentiate_sigmoid(const nb::DRef<Eigen::MatrixXd> &x) {
-    Eigen::MatrixXd ones = Eigen::MatrixXd::Constant(x.rows(), x.cols(), 1.0);
-    Eigen::MatrixXd tmp  = sigmoid(x);
-    Eigen::MatrixXd res  = tmp.cwiseProduct(ones - tmp);
-    return res;
+ALTMIN_INLINE Eigen::MatrixXd differentiate_sigmoid(const nanobind::DRef<Eigen::MatrixXd> &x) noexcept {
+    const auto ones = Eigen::MatrixXd::Constant(x.rows(), x.cols(), 1.0);
+    const auto tmp = sigmoid(x);
+    return tmp.cwiseProduct(ones - tmp);
 }
 
-Eigen::MatrixXd differentiate_ReLU(const nb::DRef<Eigen::MatrixXd> &x) {
-    int             N = x.rows();
-    int             M = x.cols();
+ALTMIN_INLINE Eigen::MatrixXd differentiate_ReLU(const nanobind::DRef<Eigen::MatrixXd> &x) noexcept {
+    long N = x.rows();
+    long M = x.cols();
     Eigen::MatrixXd res(N, M);
-
-    for (size_t i = 0; i < N; ++i) {
-        for (size_t j = 0; j < M; ++j) {
-            if (x(i, j) >= 0.0) {
-                res(i, j) = 1.0;
-            } else {
-                res(i, j) = 0.0;
-            }
+    for (long i = 0; i < N; ++i) {
+        for (long j = 0; j < M; ++j) {
+            res(i, j) = x(i, j) >= 0.0;
         }
     }
     return res;
 }
 
-Eigen::MatrixXd differentiate_BCELoss(const nb::DRef<Eigen::MatrixXd> &output,
-                                      const nb::DRef<Eigen::MatrixXd> &target) {
-    int             N    = output.rows();
-    int             M    = output.cols();
-    double          eps  = 1e-12;
-    double          norm = -1.0 / ((double)M * (double)N);
+ALTMIN_INLINE Eigen::MatrixXd differentiate_BCELoss(const nanobind::DRef<Eigen::MatrixXd> &output,
+                                                    const nanobind::DRef<Eigen::MatrixXd> &target) noexcept {
+    const auto N = output.rows();
+    const auto M = output.cols();
+    const auto eps = 1e-12;
+    const auto norm = -1.0 / ((double) M * (double) N);
 
-    Eigen::MatrixXd tmp  = Eigen::MatrixXd::Constant(N, M, 1.0 + eps);
-    Eigen::MatrixXd res =
-        norm *
-        ((target - output)
-             .cwiseQuotient(
-                 (tmp - output).cwiseProduct((output.array() + eps).matrix())));
-    return res;
+    Eigen::MatrixXd tmp = Eigen::MatrixXd::Constant(N, M, 1.0 + eps);
+    return norm * ((target - output).cwiseQuotient((tmp - output).cwiseProduct((output.array() + eps).matrix())));
 }
 
-Eigen::MatrixXd differentiate_MSELoss(const nb::DRef<Eigen::MatrixXd> &output,
-                                      const nb::DRef<Eigen::MatrixXd> &target) {
-    
-    int             N    = output.rows();
-    int             M    = output.cols();
-    double          norm = (2.0 / ((double)M * (double)N));
+ALTMIN_INLINE Eigen::MatrixXd differentiate_MSELoss(const nanobind::DRef<Eigen::MatrixXd> &output,
+                                                    const nanobind::DRef<Eigen::MatrixXd> &target) noexcept {
 
-    Eigen::MatrixXd res  = norm * (output - target);
-    
-    return res;
+    const auto N = output.rows();
+    const auto M = output.cols();
+    const auto norm = (2.0 / static_cast<double>(M * N));
+    return norm * (output - target);
 }
 
-Eigen::MatrixXd differentiate_CrossEntropyLoss(nb::DRef<Eigen::MatrixXd> output,
-                                      const nb::DRef<Eigen::VectorXd> &target, int num_classes){
+ALTMIN_INLINE Eigen::MatrixXd differentiate_CrossEntropyLoss(nanobind::DRef<Eigen::MatrixXd> output,
+                                                             const nanobind::DRef<Eigen::VectorXd> &target,
+                                                             const int num_classes) noexcept {
     softmax(output);
-    return (output- one_hot_encoding(target, num_classes))/output.rows();
+    return (output - one_hot_encoding(target, num_classes)) / output.rows();
 }
 
- 
+
 // template <typename Derived>
 // void test_eigen_base(const nb::DRef<Eigen::EigenBase<Derived> &targets){
 //     std::cout << targets << std::endl;

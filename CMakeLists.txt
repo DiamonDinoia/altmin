@@ -126,14 +126,14 @@ CPMAddPackage(
         GIT_SHALLOW YES
         GIT_PROGRESS YES
         EXCLUDE_FROM_ALL YES
-        SYSTEM YES
+        SYSTEM
         DOWNLOAD_ONLY YES 
 
 )
 
 if(Eigen_ADDED)
   add_library(Eigen INTERFACE IMPORTED)
-  target_include_directories(Eigen INTERFACE ${Eigen_SOURCE_DIR})
+  target_include_directories(Eigen SYSTEM INTERFACE ${Eigen_SOURCE_DIR})
 endif()
 
 CPMAddPackage(
@@ -143,7 +143,7 @@ CPMAddPackage(
         GIT_SHALLOW YES
         GIT_PROGRESS YES
         EXCLUDE_FROM_ALL YES
-        SYSTEM YES
+        SYSTEM
 )
 
 

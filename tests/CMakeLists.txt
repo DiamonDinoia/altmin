@@ -39,3 +39,7 @@
 add_executable(eigen-test eigen-performance.cpp)
 target_link_libraries(eigen-test PRIVATE Eigen )
 target_add_compilation_flags(eigen-test)
+
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(eigen-test PRIVATE OpenMP::OpenMP_CXX)
+endif()
