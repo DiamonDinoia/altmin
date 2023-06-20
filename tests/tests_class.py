@@ -488,6 +488,15 @@ class TestConvergence(unittest.TestCase):
         epochs = 150
 
         model = LogApproximator(100)
+        model = get_mods(model)
+        model = model[1:]
+        start = time.time()
+        loss_sgd, outputs_sgd = sgd(model, X, Y, epochs)
+        end = time.time()
+        time_sgd = end-start
+        print("Time for sgd :" + str(time_sgd))
+
+        model = LogApproximator(100)
         model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.001})
         model[-1].optimizer.param_groups[0]['lr'] = 0.001
         model = model[1:]
@@ -508,7 +517,7 @@ class TestConvergence(unittest.TestCase):
         print("Time for cpp :" + str(time_cpp))
 
         #Optional but prints res and how loss changes
-        show_res(X, Y, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp)
+        show_res(X, Y, outputs_sgd, outputs_altmin, outputs_cpp, loss_sgd, loss_altmin, loss_cpp)
 
 # def save_state_to_dict(file_path):
 #     model = simpleNN(2, [4,3],1)
