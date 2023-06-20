@@ -52,27 +52,27 @@ def test_nn(network):
 
 
 
-# def sgd(model, X, Y, epochs):
-#     losses = []
-#     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-#     for epoch in range(epochs):
+def sgd(model, X, Y, epochs):
+    losses = []
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    for epoch in range(epochs):
 
-#         for index in range(0,99):
-#             data = torch.tensor(np.array(X[index])).double()
-#             targets = torch.tensor(np.array(Y[index])).double()
-#             targets.reshape(1,1)
-#             optimizer.zero_grad()
-#             output = model(data)
-#             loss = criterion(output,targets)
-#             #print("loss "+str(loss))
-#             loss.backward()
-#             optimizer.step()
-#         loss = test_set(model).item() 
-#         losses.append(loss)
-#         print("Epoch: " + str(epoch) + "res "+ str(loss))
+        for index in range(0,99):
+            data = torch.tensor(np.array(X[index])).double()
+            targets = torch.tensor(np.array(Y[index])).double()
+            targets.reshape(1,1)
+            optimizer.zero_grad()
+            output = model(data)
+            loss = nn.MSELoss()(output,targets)
+            #print("loss "+str(loss))
+            loss.backward()
+            optimizer.step()
+        loss = test_set(model).item() 
+        losses.append(loss)
+        print("Epoch: " + str(epoch) + "res "+ str(loss))
 
-#     outputs = model(torch.tensor(np.array(X)).double())
-#     return losses, outputs
+    outputs = model(torch.tensor(np.array(X)).double())
+    return losses, outputs
 
 def run_altmin(model, X, Y, epochs):
     losses= [] 
@@ -115,12 +115,13 @@ def run_cpp_altmin(neural_network, X, Y, epochs):
     outputs = neural_network.get_codes(torch.tensor(np.array(X)).double(),False)
     return losses, outputs
 
-def show_res(X, Y, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp):
+def show_res(X, Y, outputs_sgd, outputs_altmin, outputs_cpp, loss_sgd, loss_altmin, loss_cpp,):
     plt.figure(figsize = (10,6))
     plt.plot(X, Y, linewidth=2, marker='.', label="log")
     #plt.plot(X, outputs_sgd.detach(), linewidth=2, marker='.', label="sgd")
     plt.plot(X, outputs_altmin.detach(), linewidth=2, marker='.', label="altmin")
     plt.plot(X, outputs_cpp, linewidth=2, marker='.', label="altmin cpp")
+    plt.plot(X, outputs_sgd.detach(), linewidth=2, marker='.', label="altmin sgd")
     plt.legend()
     plt.show()
 
@@ -128,6 +129,7 @@ def show_res(X, Y, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp):
     #plt.plot(loss_sgd, label="sgd")
     plt.plot(loss_altmin, label="altmin")
     plt.plot(loss_cpp, label="cpp")
+    plt.plot(loss_sgd, label='sgd')
     plt.legend()
     plt.show()
 
@@ -138,9 +140,17 @@ def main():
     X = X[1:]
     X = X.reshape(99,1)
     Y = np.log(X)
-    epochs = 300
+    epochs = 100
 
 
+    model = LogApproximator(100)
+    model = get_mods(model)
+    model = model[1:]
+    start = time.time()
+    loss_sgd, outputs_sgd = sgd(model, X, Y, epochs)
+    end = time.time()
+    time_sgd = end-start
+    print("Time for sgd :" + str(time_sgd))
 
     model = LogApproximator(100)
     model = get_mods(model)
@@ -165,4 +175,5 @@ def main():
 
 
 
-    show_res(X, Y, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp)
+    show_res(X, Y, outputs_sgd, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp, loss_sgd)
+
