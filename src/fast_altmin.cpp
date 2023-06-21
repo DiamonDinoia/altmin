@@ -8,7 +8,7 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/shared_ptr.h>
 
-#include <memory>
+
 #include <cmath>
 #include <iostream>
 #include <utility>
@@ -128,7 +128,7 @@ public:
         return codes;
     }
 
-    ALTMIN_INLINE void forward(const Eigen::Ref<Eigen::MatrixXd> &inputs, const bool store_codes) noexcept {
+    ALTMIN_INLINE void forward(const nanobind::DRef<Eigen::MatrixXd> &inputs, const bool store_codes) noexcept {
         switch (layer) {
             case (Layer::layer_type::RELU):
                 layer_output = inputs;
@@ -151,8 +151,8 @@ public:
     }
 
     // See https://pytorch.org/docs/stable/generated/torch.optim.Adam.html for implementation details
-    ALTMIN_INLINE void
-    adam(const Eigen::Ref<Eigen::MatrixXd> &grad_weight, const Eigen::Ref<Eigen::VectorXd> &grad_bias) noexcept {
+    ALTMIN_INLINE void adam(const nanobind::DRef<Eigen::MatrixXd> &grad_weight,
+                            const nanobind::DRef<Eigen::VectorXd> &grad_bias) noexcept {
 
         // Update weight
         if (init_vals) {
@@ -186,7 +186,8 @@ public:
     }
 
 
-    ALTMIN_INLINE void differentiate_layer(const Eigen::Ref<Eigen::MatrixXd> &inputs, bool code_derivative) noexcept {
+    ALTMIN_INLINE void differentiate_layer(const nanobind::DRef<Eigen::MatrixXd> &inputs,
+                                           bool code_derivative) noexcept {
         switch (layer) {
             case (Layer::layer_type::RELU):
                 dout = differentiate_ReLU(inputs);
@@ -248,8 +249,8 @@ public:
             inputs(batch_size, m) {}
 
     // Create a non linear layer and add to layers vector
-    ALTMIN_INLINE void
-    push_back_non_lin_layer(const Layer::layer_type layer_type, const int batch_size, const int n, const double lr) {
+    ALTMIN_INLINE void push_back_non_lin_layer(const Layer::layer_type layer_type, const int batch_size,
+                                               const int n, const double lr) {
         //Have to be shared not unique as python needs access to them as well
         //https://github.com/pybind/pybind11/issues/115
         //maybe nanobind has fixed this by now but I couldn't make it work
@@ -258,7 +259,8 @@ public:
 
     // Create a linear layer and add to layers vector
     ALTMIN_INLINE void push_back_lin_layer(Layer::layer_type layer_type, const int batch_size, const int n, const int m,
-                                           nanobind::DRef<Eigen::MatrixXd> weight, nanobind::DRef<Eigen::VectorXd> bias,
+                                           const nanobind::DRef<Eigen::MatrixXd> &weight,
+                                           nanobind::DRef<Eigen::VectorXd> bias,
                                            const bool has_codes, const double lr) {
         layers.emplace_back(layer_type, batch_size, n, m, weight, bias, has_codes, lr);
     }
@@ -273,11 +275,11 @@ public:
         return static_cast<int>(layers.size() - 1);
     }
 
-    ALTMIN_INLINE void add_to_vectors(int start_idx, int layer_idx, int end_idx, int derivative_idx){
+    ALTMIN_INLINE void add_to_vectors(int start_idx, int layer_idx, int end_idx, int derivative_idx) {
         weight_pairs.emplace_back(start_idx, layer_idx, end_idx, derivative_idx);
-        weight_dL_douts.emplace_back(Eigen::MatrixXd(batch_size, layers[layer_idx].weight.rows()));
-        dL_dWs.emplace_back(Eigen::MatrixXd(batch_size,  layers[start_idx].weight.rows()));
-        dL_dbs.emplace_back(Eigen::MatrixXd(batch_size, layers[start_idx].weight.rows()));
+        weight_dL_douts.emplace_back(batch_size, layers[layer_idx].weight.rows());
+        dL_dWs.emplace_back(batch_size, layers[start_idx].weight.rows());
+        dL_dbs.emplace_back(batch_size, layers[start_idx].weight.rows());
     }
 
 
@@ -293,13 +295,13 @@ public:
                     if (!layers[idx].has_codes) {
                         end_idx = get_idx_next_layer_with_codes(idx);
                         add_to_vectors(start_idx, idx, end_idx, derivative_idx);
-                        derivative_idx+=1;
+                        derivative_idx += 1;
                         continue;
                     }
                     end_idx = get_idx_next_layer_with_codes(idx);
                     code_pairs.insert(code_pairs.begin(), std::make_tuple(idx, end_idx));
                     add_to_vectors(start_idx, idx, idx, derivative_idx);
-                    derivative_idx+=1;
+                    derivative_idx += 1;
                     start_idx = idx;
                     break;
                 default:
@@ -308,7 +310,7 @@ public:
         }
     }
 
-    
+
     //Low priority but should return a string
     void print_info() {
         for (auto &layer: layers) {
@@ -318,10 +320,9 @@ public:
 
     // Forward pass of model
     // If update_codes=false then model is making predictions and not training and thus don't update the codes
-    ALTMIN_INLINE Eigen::MatrixXd
-    get_codes(nanobind::DRef<Eigen::MatrixXd> inputs_nb, const bool update_codes) noexcept {
-        inputs = inputs_nb;
-        layers[0].forward(inputs, update_codes);
+    ALTMIN_INLINE Eigen::MatrixXd get_codes(const nanobind::DRef<Eigen::MatrixXd> &inputs_nb,
+                                            const bool update_codes) noexcept {
+        layers[0].forward(inputs_nb, update_codes);
         for (int idx = 1; idx < layers.size(); idx++) {
             layers[idx].forward(layers[idx - 1].layer_output, update_codes);
         }
@@ -346,7 +347,6 @@ public:
                 layer.codes = codes[y];
                 y += 1;
             }
-
         }
     }
 
@@ -399,7 +399,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // //This is used in the calculate the input for the partial derivative
-    ALTMIN_INLINE void calc_matrix_for_derivative(Eigen::Ref<Eigen::MatrixXd> inputs, const int idx,
+    ALTMIN_INLINE void calc_matrix_for_derivative(const nanobind::DRef<Eigen::MatrixXd> &inputs, const int idx,
                                                   const int end_idx) noexcept {
         if (idx < end_idx) {
             layers[idx].forward(inputs, false);
@@ -416,14 +416,14 @@ public:
     }
 
     //Apply the chain rule to calculate dw, db or dc depending on bool code_derivative
-    void apply_chain_rule(const bool code_derivative) {
+    ALTMIN_INLINE void apply_chain_rule(const bool code_derivative) noexcept {
         for (int idx = end_idx; idx > start_idx; idx--) {
             switch (layers[idx].layer) {
                 case (Layer::layer_type::RELU):
                     dL_dout = dL_dout.cwiseProduct(layers[idx].dout);
                     break;
                 case (Layer::layer_type::LINEAR):
-                        dL_dout = dL_dout * layers[idx].dout;
+                    dL_dout = dL_dout * layers[idx].dout;
                     break;
                 case (Layer::layer_type::SIGMOID):
                     dL_dout = dL_dout.cwiseProduct(layers[idx].dout);
@@ -435,7 +435,8 @@ public:
         dL_dc = dL_dout;
     }
 
-    void apply_chain_rule_weights(const bool code_derivative, const int start_idx, const int end_idx, const int derivative_idx) {
+    ALTMIN_INLINE void apply_chain_rule_weights(const bool code_derivative, const int start_idx, const int end_idx,
+                                                const int derivative_idx) noexcept {
 
         for (int idx = end_idx; idx > start_idx; idx--) {
             switch (layers[idx].layer) {
@@ -460,12 +461,14 @@ public:
 
     //USed to calc dw and db,   or dc depending on code_derivative
     //Calc_matrix_for_derivative uses the layer_output member of the prev layer to store the input for partial derivative
-    ALTMIN_INLINE void calculate_gradients(Eigen::Ref<Eigen::MatrixXd> inputs, const bool code_derivative, const int start_idx, const int end_idx, const int derivative_idx) noexcept {
+    ALTMIN_INLINE void
+    calculate_gradients(const nanobind::DRef<Eigen::MatrixXd> &inputs, const bool code_derivative, const int start_idx,
+                        const int end_idx, const int derivative_idx) noexcept {
 
         if (start_idx == end_idx) {
             layers[end_idx].differentiate_layer(inputs, code_derivative);
             dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * layers[start_idx].dout_dW;
-            dL_dbs[derivative_idx]= weight_dL_douts[derivative_idx].colwise().sum();
+            dL_dbs[derivative_idx] = weight_dL_douts[derivative_idx].colwise().sum();
             return;
         } else {
             calc_matrix_for_derivative(inputs, start_idx + 1, end_idx);
@@ -492,18 +495,18 @@ public:
 
         }
 
-        if (code_derivative){
+        if (code_derivative) {
             apply_chain_rule(code_derivative);
-        }else{
+        } else {
             apply_chain_rule_weights(false, start_idx, end_idx, derivative_idx);
         }
-        
+
 
     }
 
 
     //Update the codes
-    ALTMIN_INLINE void update_codes(nanobind::DRef<Eigen::MatrixXd> targets) noexcept {
+    ALTMIN_INLINE void update_codes(const nanobind::DRef<Eigen::MatrixXd> &targets) noexcept {
         bool last_layer = true;
         int idx_last_code;
 
@@ -518,9 +521,7 @@ public:
             start_idx = std::get<0>(indexes);
             end_idx = std::get<1>(indexes);
             for (size_t it = 0; it < n_iter_codes; it++) {
-                // FIXME: is this needed?
-                // ANSWER: No
-                //Use the code to predic the next code or model output if next layer
+
                 inputs = layers[start_idx].codes;
                 calc_matrix_for_derivative(inputs, start_idx + 1, end_idx + 1);
 
@@ -554,44 +555,24 @@ public:
     }
 
     // //data gets changed in place and is used in multiple places so would need to be copied anyway so no point passing a reference.
-    ALTMIN_INLINE void update_weights(nanobind::DRef<Eigen::MatrixXd> data_nb,
-                                      nanobind::DRef<Eigen::MatrixXd> targets_nb) noexcept {
-
-
-        bool first_layer = true;
-
-        //Can use the weight pairs to do the code inside the loop in parallel
-        // FIXME: this cannot be parallelised as is because inputs, dL_dout, dL_dW, dL_db are shared between threads
-        //  moreover is first layer is true and applied to all layers in parallel first layer should be set inside
-        //  the loop using indexes inputs, dL_dout, dL_dW, dL_db can be copied.
-        //  Am I missing something that should be copied too?
-
-        // Answer:
-        // Each layer now has its own dL_dout, dL_dW and dL_db accessed using the derivative_idx_parallel 
-        // Only update codes uses the inputs member class now
-        // First layer is not applied to all layers, just the first layer so shouldn't be set inside the loop.
-        
-        // update_weights_parallel(data, weight_pairs[0], targets, true);
-        // update_weights_parallel(layers[std::get<0>(weight_pairs[1])].codes, weight_pairs[1], targets, false);
-        // update_weights_parallel(layers[std::get<0>(weight_pairs[2])].codes, weight_pairs[2], targets, false);
-
-
-        Eigen::MatrixXd data = data_nb;
-        Eigen::MatrixXd targets = targets_nb;
-
+    ALTMIN_INLINE void update_weights(const nanobind::DRef<Eigen::MatrixXd> &data_nb,
+                                      const nanobind::DRef<Eigen::MatrixXd> &targets_nb) noexcept {
+#pragma omp parallel for schedule(dynamic) default(none) shared(data_nb, targets_nb, weight_pairs, layers)
         for (int x = 0; x < weight_pairs.size(); x++) {
-            if ( x == 0){
-                update_weights_parallel(data, weight_pairs[x], targets, first_layer);
-            }else{
-                update_weights_parallel(layers[std::get<0>(weight_pairs[x])].codes, weight_pairs[x], targets, first_layer);
+            if (x == 0) {
+                update_weights_parallel(data_nb, weight_pairs[x], targets_nb, true);
+            } else {
+                update_weights_parallel(layers[std::get<0>(weight_pairs[x])].codes, weight_pairs[x], targets_nb,
+                                        false);
             }
-            first_layer = false;
         }
     }
 
-    ALTMIN_INLINE void update_weights_parallel(Eigen::Ref<Eigen::MatrixXd> inputs, const std::tuple<int,int,int,int> &indexes,
-                                    Eigen::Ref<Eigen::MatrixXd> targets, bool first_layer) noexcept {
-        
+    ALTMIN_INLINE void
+    update_weights_parallel(const nanobind::DRef<Eigen::MatrixXd> &inputs,
+                            const std::tuple<int, int, int, int> &indexes,
+                            const nanobind::DRef<Eigen::MatrixXd> &targets, bool first_layer) noexcept {
+
         int start_idx_parallel = std::get<0>(indexes);
         int layer_idx_parallel = std::get<1>(indexes);
         int end_idx_parallel = std::get<2>(indexes);
@@ -602,48 +583,49 @@ public:
         }
 
         for (size_t it = 0; it < n_iter_weights; it++) {
-            
+
             // populate outputs
-            
+
             if (first_layer) {
                 //weight_inputs[derivative_idx] = data;
                 calc_matrix_for_derivative(inputs, start_idx_parallel, end_idx_parallel + 1);
-                weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(layers[layer_idx_parallel].layer_output, layers[layer_idx_parallel].codes);
+                weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(
+                        layers[layer_idx_parallel].layer_output, layers[layer_idx_parallel].codes);
             } else {
 
                 //weight_inputs[derivative_idx] = layers[start_idx_parallel].codes;
 
-
                 calc_matrix_for_derivative(inputs, start_idx_parallel + 1, end_idx_parallel + 1);
 
                 if (end_idx_parallel == (layers.size() - 1)) {
-
-     
                     switch (loss_fn) {
                         case (NeuralNetwork::loss_function::BCELoss):
-                            weight_dL_douts[derivative_idx_parallel]  = differentiate_BCELoss(layers[end_idx_parallel].layer_output, targets);
+                            weight_dL_douts[derivative_idx_parallel] = differentiate_BCELoss(
+                                    layers[end_idx_parallel].layer_output, targets);
                             break;
                         case (NeuralNetwork::loss_function::MSELoss):
-                            weight_dL_douts[derivative_idx_parallel]  = differentiate_MSELoss(layers[end_idx_parallel].layer_output, targets);
+                            weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(
+                                    layers[end_idx_parallel].layer_output, targets);
                             break;
                         case (NeuralNetwork::loss_function::CrossEntropyLoss):
-                            weight_dL_douts[derivative_idx_parallel]  = differentiate_CrossEntropyLoss(layers[end_idx_parallel].layer_output, class_labels,
-                                                                        layers[end_idx_parallel].layer_output.cols());
+                            weight_dL_douts[derivative_idx_parallel] = differentiate_CrossEntropyLoss(
+                                    layers[end_idx_parallel].layer_output, class_labels,
+                                    layers[end_idx_parallel].layer_output.cols());
                             break;
                         default:
                             break;
                     }
                 } else {
-
-                    weight_dL_douts[derivative_idx_parallel]  = differentiate_MSELoss(layers[layer_idx_parallel].layer_output, layers[layer_idx_parallel].codes);
+                    weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(
+                            layers[layer_idx_parallel].layer_output, layers[layer_idx_parallel].codes);
                 }
             }
 
             //Seperate functions so only have to pass the data if necesseray
             //std::optional may be better
-           
+
             calculate_gradients(inputs, false, start_idx_parallel, end_idx_parallel, derivative_idx_parallel);
-        
+
             layers[layer_idx_parallel].adam(dL_dWs[derivative_idx_parallel], dL_dbs[derivative_idx_parallel]);
         }
     }

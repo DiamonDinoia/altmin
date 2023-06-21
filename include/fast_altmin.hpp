@@ -24,7 +24,7 @@
 // Eigen::RowMajor>> &weight doesn't change the order of the data as a
 // referenced is passed to the data And it's quicker to transpose the data here
 // than in cpp But i'll come nack to this at the end
-ALTMIN_INLINE Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> lin(
+ALTMIN_INLINE auto lin(
         const nanobind::DRef<Eigen::MatrixXd> &input,
         const nanobind::DRef<Eigen::MatrixXd> &weight,
         const nanobind::DRef<Eigen::VectorXd> &bias) noexcept {
@@ -49,7 +49,7 @@ ALTMIN_INLINE void ReLU_inplace(nanobind::DRef<Eigen::MatrixXd> input) noexcept 
     }
 }
 
-ALTMIN_INLINE Eigen::MatrixXd ReLU(const nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
+ALTMIN_INLINE auto ReLU(const nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
     Eigen::MatrixXd res = input;
     ReLU_inplace(res);
     return res;
@@ -61,7 +61,7 @@ ALTMIN_INLINE Eigen::MatrixXd ReLU(const nanobind::DRef<Eigen::MatrixXd> &input)
 // but again I'll come back to this
 // Also note the reference to the data is passed and the data is changed in
 // place so nothing returned
-ALTMIN_INLINE Eigen::MatrixXd sigmoid(const nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
+ALTMIN_INLINE auto sigmoid(const nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
     const auto N = input.rows();
     const auto M = input.cols();
     Eigen::MatrixXd res(N, M);
@@ -127,7 +127,7 @@ ALTMIN_INLINE double MSELoss(const nanobind::DRef<Eigen::MatrixXd> &predictions,
 ALTMIN_INLINE void log_softmax(nanobind::DRef<Eigen::MatrixXd> input) noexcept {
     const auto N = input.rows();
     const auto M = input.cols();
-    // TODO: Probably can be done using eignen instead of std::vector and various loops
+    // TODO: Probably can be done using eigen instead of std::vector and various loops
     std::vector<double> exps(M);
     for (long i = 0; i < N; ++i) {
         for (long j = 0; j < M; ++j) {
@@ -166,8 +166,8 @@ ALTMIN_INLINE void softmax(nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
 
 }
 
-ALTMIN_INLINE Eigen::MatrixXd
-one_hot_encoding(const nanobind::DRef<Eigen::VectorXd> &input, const int num_classes) noexcept {
+ALTMIN_INLINE auto one_hot_encoding(const nanobind::DRef<Eigen::VectorXd> &input,
+                                               const int num_classes) noexcept {
     const auto N = input.rows();
     const auto M = num_classes;
     Eigen::MatrixXd res(N, M);
@@ -188,20 +188,19 @@ ALTMIN_INLINE double negative_log_likelihood(const nanobind::DRef<Eigen::MatrixX
     return (-1.0 / static_cast<double>(log_likelihoods.rows())) * sum;
 }
 
-ALTMIN_INLINE
-double
-cross_entropy_loss(nanobind::DRef<Eigen::MatrixXd> input, const nanobind::DRef<Eigen::VectorXi> &targets) noexcept {
+ALTMIN_INLINE double cross_entropy_loss(nanobind::DRef<Eigen::MatrixXd> input,
+                                        const nanobind::DRef<Eigen::VectorXi> &targets) noexcept {
     log_softmax(input);
     return negative_log_likelihood(input, targets);
 }
 
-ALTMIN_INLINE Eigen::MatrixXd differentiate_sigmoid(const nanobind::DRef<Eigen::MatrixXd> &x) noexcept {
+ALTMIN_INLINE auto differentiate_sigmoid(const nanobind::DRef<Eigen::MatrixXd> &x) noexcept {
     const auto ones = Eigen::MatrixXd::Constant(x.rows(), x.cols(), 1.0);
     const auto tmp = sigmoid(x);
     return tmp.cwiseProduct(ones - tmp);
 }
 
-ALTMIN_INLINE Eigen::MatrixXd differentiate_ReLU(const nanobind::DRef<Eigen::MatrixXd> &x) noexcept {
+ALTMIN_INLINE auto differentiate_ReLU(const nanobind::DRef<Eigen::MatrixXd> &x) noexcept {
     long N = x.rows();
     long M = x.cols();
     Eigen::MatrixXd res(N, M);
@@ -213,18 +212,18 @@ ALTMIN_INLINE Eigen::MatrixXd differentiate_ReLU(const nanobind::DRef<Eigen::Mat
     return res;
 }
 
-ALTMIN_INLINE Eigen::MatrixXd differentiate_BCELoss(const nanobind::DRef<Eigen::MatrixXd> &output,
+ALTMIN_INLINE auto differentiate_BCELoss(const nanobind::DRef<Eigen::MatrixXd> &output,
                                                     const nanobind::DRef<Eigen::MatrixXd> &target) noexcept {
     const auto N = output.rows();
     const auto M = output.cols();
     const auto eps = 1e-12;
     const auto norm = -1.0 / ((double) M * (double) N);
 
-    Eigen::MatrixXd tmp = Eigen::MatrixXd::Constant(N, M, 1.0 + eps);
+    const auto tmp = Eigen::MatrixXd::Constant(N, M, 1.0 + eps);
     return norm * ((target - output).cwiseQuotient((tmp - output).cwiseProduct((output.array() + eps).matrix())));
 }
 
-ALTMIN_INLINE Eigen::MatrixXd differentiate_MSELoss(const nanobind::DRef<Eigen::MatrixXd> &output,
+ALTMIN_INLINE auto differentiate_MSELoss(const nanobind::DRef<Eigen::MatrixXd> &output,
                                                     const nanobind::DRef<Eigen::MatrixXd> &target) noexcept {
 
     const auto N = output.rows();
@@ -233,7 +232,7 @@ ALTMIN_INLINE Eigen::MatrixXd differentiate_MSELoss(const nanobind::DRef<Eigen::
     return norm * (output - target);
 }
 
-ALTMIN_INLINE Eigen::MatrixXd differentiate_CrossEntropyLoss(nanobind::DRef<Eigen::MatrixXd> output,
+ALTMIN_INLINE auto differentiate_CrossEntropyLoss(nanobind::DRef<Eigen::MatrixXd> output,
                                                              const nanobind::DRef<Eigen::VectorXd> &target,
                                                              const int num_classes) noexcept {
     softmax(output);
