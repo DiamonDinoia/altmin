@@ -240,24 +240,3 @@ ALTMIN_INLINE Eigen::MatrixXd differentiate_CrossEntropyLoss(nanobind::DRef<Eige
     return (output - one_hot_encoding(target, num_classes)) / output.rows();
 }
 
-
-// template <typename Derived>
-// void test_eigen_base(const nb::DRef<Eigen::EigenBase<Derived> &targets){
-//     std::cout << targets << std::endl;
-// }
-
-// // Doesn't really need to be a function but for completness
-// Breaks build
-// std::vector<Eigen::MatrixXd> differentiate_linear_layer(
-//     nb::DRef<Eigen::MatrixXd> &input) {
-//     int                          N = input.rows();
-//     int                          M = input.cols();
-
-//     Eigen::MatrixXd dw = input;
-//     std::vector<Eigen::MatrixXd> grads;
-//     // dw
-//     grads.push_back(dw);
-//     // db - This is wront dim
-//     grads.push_back(Eigen::MatrixXd::Constant(N, M, 1.0));
-//     return grads;
-// }

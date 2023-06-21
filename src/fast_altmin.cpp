@@ -203,7 +203,8 @@ public:
                 }
                 break;
             case (Layer::layer_type::SIGMOID):
-                dout = differentiate_sigmoid(inputs);
+                dout = inputs;
+                dout = differentiate_sigmoid(dout);
                 break;
         }
     }
@@ -242,7 +243,7 @@ public:
                   double mu, double momentum) :
     ////////// Model hyperparemters ////////////////////////////////////////////////////////////////////////////////////
             n_iter_codes(n_iter_codes), n_iter_weights(n_iter_weights), lr_codes(lr_codes), mu(mu), momentum(momentum),
-            loss_fn(loss_fn),
+            loss_fn(loss_fn), batch_size(batch_size),
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             inputs(batch_size, m) {}
 
@@ -272,21 +273,33 @@ public:
         return static_cast<int>(layers.size() - 1);
     }
 
+    ALTMIN_INLINE void add_to_vectors(int start_idx, int layer_idx, int end_idx, int derivative_idx){
+        weight_pairs.emplace_back(start_idx, layer_idx, end_idx, derivative_idx);
+        weight_dL_douts.emplace_back(Eigen::MatrixXd(batch_size, layers[layer_idx].weight.rows()));
+        dL_dWs.emplace_back(Eigen::MatrixXd(batch_size,  layers[start_idx].weight.rows()));
+        dL_dbs.emplace_back(Eigen::MatrixXd(batch_size, layers[start_idx].weight.rows()));
+    }
+
+
     // Create pairs of layers needed to update the codes and weights so you don't have to iterate over all the layers each time
     // Only run once after all layers have been added to the nn
     ALTMIN_INLINE void construct_pairs() {
         int end_idx;
         int start_idx = 0;
+        int derivative_idx = 0;
         for (int idx = 0; idx < layers.size(); idx++) {
             switch (layers[idx].layer) {
                 case (Layer::layer_type::LINEAR):
                     if (!layers[idx].has_codes) {
-                        weight_pairs.emplace_back(start_idx, idx, get_idx_next_layer_with_codes(idx));
+                        end_idx = get_idx_next_layer_with_codes(idx);
+                        add_to_vectors(start_idx, idx, end_idx, derivative_idx);
+                        derivative_idx+=1;
                         continue;
                     }
                     end_idx = get_idx_next_layer_with_codes(idx);
                     code_pairs.insert(code_pairs.begin(), std::make_tuple(idx, end_idx));
-                    weight_pairs.emplace_back(start_idx, idx, idx);
+                    add_to_vectors(start_idx, idx, idx, derivative_idx);
+                    derivative_idx+=1;
                     start_idx = idx;
                     break;
                 default:
@@ -295,6 +308,7 @@ public:
         }
     }
 
+    
     //Low priority but should return a string
     void print_info() {
         for (auto &layer: layers) {
@@ -385,7 +399,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // //This is used in the calculate the input for the partial derivative
-    ALTMIN_INLINE void calc_matrix_for_derivative(const Eigen::Ref<Eigen::MatrixXd> &inputs, const int idx,
+    ALTMIN_INLINE void calc_matrix_for_derivative(Eigen::Ref<Eigen::MatrixXd> inputs, const int idx,
                                                   const int end_idx) noexcept {
         if (idx < end_idx) {
             layers[idx].forward(inputs, false);
@@ -409,13 +423,7 @@ public:
                     dL_dout = dL_dout.cwiseProduct(layers[idx].dout);
                     break;
                 case (Layer::layer_type::LINEAR):
-                    if (code_derivative) {
                         dL_dout = dL_dout * layers[idx].dout;
-                    } else {
-                        dL_dW = dL_dout.transpose() * layers[idx].dout;
-                        dL_db = dL_dout.colwise().sum();
-                        return;
-                    }
                     break;
                 case (Layer::layer_type::SIGMOID):
                     dL_dout = dL_dout.cwiseProduct(layers[idx].dout);
@@ -427,40 +435,38 @@ public:
         dL_dc = dL_dout;
     }
 
-    //Calculate grad for first layer for weights
-    //This is probably mergable with calculate_gradient_first_layer I meant to do this but didn't have time
-    ALTMIN_INLINE void calculate_gradients_first_layer(const Eigen::MatrixXd &data) noexcept {
-        if (start_idx == end_idx) {
-            inputs = data;
-            layers[end_idx].differentiate_layer(inputs, false);
-        } else {
-            calc_matrix_for_derivative(inputs, start_idx, end_idx);
-            layers[end_idx].differentiate_layer(layers[end_idx - 1].layer_output, false);
+    void apply_chain_rule_weights(const bool code_derivative, const int start_idx, const int end_idx, const int derivative_idx) {
+
+        for (int idx = end_idx; idx > start_idx; idx--) {
+            switch (layers[idx].layer) {
+                case (Layer::layer_type::RELU):
+                    weight_dL_douts[derivative_idx] = weight_dL_douts[derivative_idx].cwiseProduct(layers[idx].dout);
+                    break;
+                case (Layer::layer_type::LINEAR):
+                    dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * layers[idx].dout;
+                    dL_dbs[derivative_idx] = weight_dL_douts[derivative_idx].colwise().sum();
+                    return;
+
+                case (Layer::layer_type::SIGMOID):
+                    weight_dL_douts[derivative_idx] = weight_dL_douts[derivative_idx].cwiseProduct(layers[idx].dout);
+                    break;
+
+            }
+            //std::cout << "dL_dout ( " << weight_dL_douts[derivative_idx].rows() << " , " << weight_dL_douts[derivative_idx].cols() << " ) " << std::endl;
+
         }
-
-        if (end_idx - 1 > start_idx) {
-            inputs = data;
-            calc_matrix_for_derivative(inputs, start_idx, end_idx - 1);
-            layers[end_idx - 1].differentiate_layer(layers[end_idx - 2].layer_output, false);
-        }
-
-        if (end_idx - 2 > start_idx) {
-            inputs = data;
-            calc_matrix_for_derivative(inputs, start_idx, end_idx - 2);
-            layers[end_idx - 2].differentiate_layer(layers[end_idx - 3].layer_output, false);
-        }
-
-        dL_dW = dL_dout.transpose() * layers[start_idx].dout_dW;
-        dL_db = dL_dout.colwise().sum();
-
     }
+
 
     //USed to calc dw and db,   or dc depending on code_derivative
     //Calc_matrix_for_derivative uses the layer_output member of the prev layer to store the input for partial derivative
-    ALTMIN_INLINE void calculate_gradients(const bool code_derivative) noexcept {
+    ALTMIN_INLINE void calculate_gradients(Eigen::Ref<Eigen::MatrixXd> inputs, const bool code_derivative, const int start_idx, const int end_idx, const int derivative_idx) noexcept {
+
         if (start_idx == end_idx) {
-            inputs = layers[start_idx].codes;
             layers[end_idx].differentiate_layer(inputs, code_derivative);
+            dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * layers[start_idx].dout_dW;
+            dL_dbs[derivative_idx]= weight_dL_douts[derivative_idx].colwise().sum();
+            return;
         } else {
             calc_matrix_for_derivative(inputs, start_idx + 1, end_idx);
             layers[end_idx].differentiate_layer(layers[end_idx - 1].layer_output, code_derivative);
@@ -468,7 +474,6 @@ public:
 
         if (end_idx - 1 > start_idx) {
             if (end_idx - 1 == start_idx + 1) {
-                inputs = layers[start_idx].codes;
                 layers[end_idx - 1].differentiate_layer(inputs, code_derivative);
             } else {
                 calc_matrix_for_derivative(inputs, start_idx + 1, end_idx - 1);
@@ -476,10 +481,9 @@ public:
             }
         }
 
-        if (end_idx - 2 > start_idx) {
 
+        if (end_idx - 2 > start_idx) {
             if (end_idx - 2 == start_idx + 1) {
-                inputs = layers[start_idx].codes;
                 layers[end_idx - 2].differentiate_layer(inputs, code_derivative);
             } else {
                 calc_matrix_for_derivative(inputs, start_idx + 1, end_idx - 2);
@@ -488,7 +492,12 @@ public:
 
         }
 
-        apply_chain_rule(code_derivative);
+        if (code_derivative){
+            apply_chain_rule(code_derivative);
+        }else{
+            apply_chain_rule_weights(false, start_idx, end_idx, derivative_idx);
+        }
+        
 
     }
 
@@ -509,10 +518,8 @@ public:
             start_idx = std::get<0>(indexes);
             end_idx = std::get<1>(indexes);
             for (size_t it = 0; it < n_iter_codes; it++) {
-                //reset to 0
                 // FIXME: is this needed?
-                dL_dout.setZero();
-                dL_dc.setZero();
+                // ANSWER: No
                 //Use the code to predic the next code or model output if next layer
                 inputs = layers[start_idx].codes;
                 calc_matrix_for_derivative(inputs, start_idx + 1, end_idx + 1);
@@ -537,8 +544,9 @@ public:
                 } else {
                     dL_dout = differentiate_MSELoss(layers[idx_last_code].layer_output, layers[idx_last_code].codes);
                 }
+
                 last_layer = false;
-                calculate_gradients(true);
+                calculate_gradients(layers[start_idx].codes, true, start_idx, end_idx, -1);
                 layers[start_idx].codes = layers[start_idx].codes - (((1.0 + momentum) * lr_codes) * dL_dc);
                 idx_last_code = start_idx;
             }
@@ -546,71 +554,97 @@ public:
     }
 
     // //data gets changed in place and is used in multiple places so would need to be copied anyway so no point passing a reference.
-    ALTMIN_INLINE void update_weights(const nanobind::DRef<Eigen::MatrixXd> &data,
-                                      nanobind::DRef<Eigen::MatrixXd> targets) noexcept {
+    ALTMIN_INLINE void update_weights(nanobind::DRef<Eigen::MatrixXd> data_nb,
+                                      nanobind::DRef<Eigen::MatrixXd> targets_nb) noexcept {
+
+
         bool first_layer = true;
-        int layer_idx;
-        Eigen::VectorXd class_labels;
-        if (loss_fn == NeuralNetwork::loss_function::CrossEntropyLoss) {
-            class_labels = Eigen::VectorXd{targets.reshaped()};
-        }
 
         //Can use the weight pairs to do the code inside the loop in parallel
         // FIXME: this cannot be parallelised as is because inputs, dL_dout, dL_dW, dL_db are shared between threads
         //  moreover is first layer is true and applied to all layers in parallel first layer should be set inside
         //  the loop using indexes inputs, dL_dout, dL_dW, dL_db can be copied.
         //  Am I missing something that should be copied too?
-        for (auto indexes: weight_pairs) {
-            start_idx = std::get<0>(indexes);
-            layer_idx = std::get<1>(indexes);
-            end_idx = std::get<2>(indexes);
-            for (size_t it = 0; it < n_iter_weights; it++) {
-                //reset to 0
-                dL_dout.setZero();
-                dL_dW.setZero();
-                dL_db.setZero();
 
-                // populate outputs
-                if (first_layer) {
-                    inputs = data;
-                    calc_matrix_for_derivative(inputs, start_idx, end_idx + 1);
-                    dL_dout = differentiate_MSELoss(layers[layer_idx].layer_output, layers[layer_idx].codes);
+        // Answer:
+        // Each layer now has its own dL_dout, dL_dW and dL_db accessed using the derivative_idx_parallel 
+        // Only update codes uses the inputs member class now
+        // First layer is not applied to all layers, just the first layer so shouldn't be set inside the loop.
+        
+        // update_weights_parallel(data, weight_pairs[0], targets, true);
+        // update_weights_parallel(layers[std::get<0>(weight_pairs[1])].codes, weight_pairs[1], targets, false);
+        // update_weights_parallel(layers[std::get<0>(weight_pairs[2])].codes, weight_pairs[2], targets, false);
 
-                } else {
-                    inputs = layers[start_idx].codes;
 
-                    calc_matrix_for_derivative(inputs, start_idx + 1, end_idx + 1);
-                    if (end_idx == (layers.size() - 1)) {
-                        //dL_dout =  differentiate_BCELoss(outputs, targets);
-                        switch (loss_fn) {
-                            case (NeuralNetwork::loss_function::BCELoss):
-                                dL_dout = differentiate_BCELoss(layers[end_idx].layer_output, targets);
-                                break;
-                            case (NeuralNetwork::loss_function::MSELoss):
-                                dL_dout = differentiate_MSELoss(layers[end_idx].layer_output, targets);
-                                break;
-                            case (NeuralNetwork::loss_function::CrossEntropyLoss):
-                                dL_dout = differentiate_CrossEntropyLoss(layers[end_idx].layer_output, class_labels,
-                                                                         layers[end_idx].layer_output.cols());
-                                break;
-                            default:
-                                break;
-                        }
-                    } else {
-                        dL_dout = differentiate_MSELoss(layers[layer_idx].layer_output, layers[layer_idx].codes);
-                    }
-                }
+        Eigen::MatrixXd data = data_nb;
+        Eigen::MatrixXd targets = targets_nb;
 
-                //Seperate functions so only have to pass the data if necesseray
-                //std::optional may be better
-                if (first_layer) {
-                    calculate_gradients_first_layer(data);
-                } else {
-                    calculate_gradients(false);
-                }
-                layers[layer_idx].adam(dL_dW, dL_db);
+        for (int x = 0; x < weight_pairs.size(); x++) {
+            if ( x == 0){
+                update_weights_parallel(data, weight_pairs[x], targets, first_layer);
+            }else{
+                update_weights_parallel(layers[std::get<0>(weight_pairs[x])].codes, weight_pairs[x], targets, first_layer);
             }
             first_layer = false;
+        }
+    }
+
+    ALTMIN_INLINE void update_weights_parallel(Eigen::Ref<Eigen::MatrixXd> inputs, const std::tuple<int,int,int,int> &indexes,
+                                    Eigen::Ref<Eigen::MatrixXd> targets, bool first_layer) noexcept {
+        
+        int start_idx_parallel = std::get<0>(indexes);
+        int layer_idx_parallel = std::get<1>(indexes);
+        int end_idx_parallel = std::get<2>(indexes);
+        int derivative_idx_parallel = std::get<3>(indexes);
+        Eigen::VectorXd class_labels;
+        if (loss_fn == NeuralNetwork::loss_function::CrossEntropyLoss) {
+            class_labels = Eigen::VectorXd{targets.reshaped()};
+        }
+
+        for (size_t it = 0; it < n_iter_weights; it++) {
+            
+            // populate outputs
+            
+            if (first_layer) {
+                //weight_inputs[derivative_idx] = data;
+                calc_matrix_for_derivative(inputs, start_idx_parallel, end_idx_parallel + 1);
+                weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(layers[layer_idx_parallel].layer_output, layers[layer_idx_parallel].codes);
+            } else {
+
+                //weight_inputs[derivative_idx] = layers[start_idx_parallel].codes;
+
+
+                calc_matrix_for_derivative(inputs, start_idx_parallel + 1, end_idx_parallel + 1);
+
+                if (end_idx_parallel == (layers.size() - 1)) {
+
+     
+                    switch (loss_fn) {
+                        case (NeuralNetwork::loss_function::BCELoss):
+                            weight_dL_douts[derivative_idx_parallel]  = differentiate_BCELoss(layers[end_idx_parallel].layer_output, targets);
+                            break;
+                        case (NeuralNetwork::loss_function::MSELoss):
+                            weight_dL_douts[derivative_idx_parallel]  = differentiate_MSELoss(layers[end_idx_parallel].layer_output, targets);
+                            break;
+                        case (NeuralNetwork::loss_function::CrossEntropyLoss):
+                            weight_dL_douts[derivative_idx_parallel]  = differentiate_CrossEntropyLoss(layers[end_idx_parallel].layer_output, class_labels,
+                                                                        layers[end_idx_parallel].layer_output.cols());
+                            break;
+                        default:
+                            break;
+                    }
+                } else {
+
+                    weight_dL_douts[derivative_idx_parallel]  = differentiate_MSELoss(layers[layer_idx_parallel].layer_output, layers[layer_idx_parallel].codes);
+                }
+            }
+
+            //Seperate functions so only have to pass the data if necesseray
+            //std::optional may be better
+           
+            calculate_gradients(inputs, false, start_idx_parallel, end_idx_parallel, derivative_idx_parallel);
+        
+            layers[layer_idx_parallel].adam(dL_dWs[derivative_idx_parallel], dL_dbs[derivative_idx_parallel]);
         }
     }
 
@@ -619,16 +653,21 @@ private:
     std::vector<Layer> layers;
     //Used so don't have to iterate over all layers each time to find layers needed to update weights and codes
     std::vector<std::tuple<int, int>> code_pairs;
-    std::vector<std::tuple<int, int, int>> weight_pairs;
+    std::vector<std::tuple<int, int, int, int>> weight_pairs;
     int start_idx;
+    int layer_idx;
     int end_idx;
 
 
-    //Used in gradient calc
+    //Used in parallel weight gradient calc
+    std::vector<Eigen::MatrixXd> weight_dL_douts;
+    std::vector<Eigen::MatrixXd> dL_dWs;
+    std::vector<Eigen::VectorXd> dL_dbs;
+
+
+    //Used to calc dL_dc
     Eigen::MatrixXd dL_dout;
     Eigen::MatrixXd dL_dc;
-    Eigen::MatrixXd dL_dW;
-    Eigen::VectorXd dL_db;
     Eigen::MatrixXd inputs;
 
     //Model hyperparams
@@ -640,6 +679,7 @@ private:
     int criterion;
     double momentum = 0.9;
     loss_function loss_fn;
+    int batch_size;
 
 
 };

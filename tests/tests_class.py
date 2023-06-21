@@ -377,24 +377,26 @@ class TestUpdateFunctions(unittest.TestCase):
                         scheduler=lambda epoch: 1/2**(epoch//8))
         model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
         model_python = model_python[1:]
-        
+        print(model_python[0].weight.data.shape)
         # cpp model setup
         neural_network = conv_model_to_class(model_python, nn.BCELoss(), targets.shape[0], 1, n_iter)
         neural_network.set_codes(codes)
         initialise_weights_and_biases(model_python, neural_network)
 
         # python
-        for it in range(1):
+        for it in range(2):
             update_hidden_weights_adam_(model_python, inputs, codes, lambda_w=0, n_iter=n_iter)
             update_last_layer_(model_python[-1], codes[-1], targets, nn.BCELoss(), n_iter)
 
         # cpp
-        for it in range(1):
+
+        for it in range(2):
             neural_network.update_weights(inputs, targets)
         
         weights = neural_network.return_weights()
         biases = neural_network.return_bias()
-
+        
+       
         # Assert weights and biases updated the same
         check_equal_weights_and_bias(model_python, weights, biases, 10e6)
 
@@ -485,7 +487,7 @@ class TestConvergence(unittest.TestCase):
         X = X[1:]
         X = X.reshape(99,1)
         Y = np.log(X)
-        epochs = 150
+        epochs = 100
 
         model = LogApproximator(100)
         model = get_mods(model)
