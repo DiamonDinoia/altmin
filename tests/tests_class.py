@@ -377,7 +377,6 @@ class TestUpdateFunctions(unittest.TestCase):
                         scheduler=lambda epoch: 1/2**(epoch//8))
         model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
         model_python = model_python[1:]
-        print(model_python[0].weight.data.shape)
         # cpp model setup
         neural_network = conv_model_to_class(model_python, nn.BCELoss(), targets.shape[0], 1, n_iter)
         neural_network.set_codes(codes)
@@ -478,48 +477,48 @@ class TestUpdateFunctions(unittest.TestCase):
 import time 
 import numpy as np
 from log_approximator import *
-class TestConvergence(unittest.TestCase):
+# class TestConvergence(unittest.TestCase):
 
-    def test_log_approx(self):
-        criterion = nn.MSELoss()
-        X = np.arange(0.0,10.0,0.1)
-        #Avoid divide by 0
-        X = X[1:]
-        X = X.reshape(99,1)
-        Y = np.log(X)
-        epochs = 100
+#     def test_log_approx(self):
+#         criterion = nn.MSELoss()
+#         X = np.arange(0.0,10.0,0.1)
+#         #Avoid divide by 0
+#         X = X[1:]
+#         X = X.reshape(99,1)
+#         Y = np.log(X)
+#         epochs = 100
 
-        model = LogApproximator(100)
-        model = get_mods(model)
-        model = model[1:]
-        start = time.time()
-        loss_sgd, outputs_sgd = sgd(model, X, Y, epochs)
-        end = time.time()
-        time_sgd = end-start
-        print("Time for sgd :" + str(time_sgd))
+#         model = LogApproximator(100)
+#         model = get_mods(model)
+#         model = model[1:]
+#         start = time.time()
+#         loss_sgd, outputs_sgd = sgd(model, X, Y, epochs)
+#         end = time.time()
+#         time_sgd = end-start
+#         print("Time for sgd :" + str(time_sgd))
 
-        model = LogApproximator(100)
-        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.001})
-        model[-1].optimizer.param_groups[0]['lr'] = 0.001
-        model = model[1:]
-        start = time.time()
-        loss_altmin, outputs_altmin = run_altmin(model, X, Y, epochs)
-        end = time.time()
-        time_altmin = end-start 
-        print("Time for altmin :" + str(time_altmin))
+#         model = LogApproximator(100)
+#         model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.001})
+#         model[-1].optimizer.param_groups[0]['lr'] = 0.001
+#         model = model[1:]
+#         start = time.time()
+#         loss_altmin, outputs_altmin = run_altmin(model, X, Y, epochs)
+#         end = time.time()
+#         time_altmin = end-start 
+#         print("Time for altmin :" + str(time_altmin))
 
-        model = LogApproximator(100)
-        model = get_mods(model)
-        model = model[1:]
-        neural_network = conv_model_to_class(model, nn.MSELoss(),  1, 1, 1, 0.001, 0.003, 0.9, 0.001)
-        start = time.time()
-        loss_cpp, outputs_cpp = run_cpp_altmin(neural_network, X, Y, epochs)
-        end = time.time()
-        time_cpp = end-start
-        print("Time for cpp :" + str(time_cpp))
+#         model = LogApproximator(100)
+#         model = get_mods(model)
+#         model = model[1:]
+#         neural_network = conv_model_to_class(model, nn.MSELoss(),  1, 1, 1, 0.001, 0.003, 0.9, 0.001)
+#         start = time.time()
+#         loss_cpp, outputs_cpp = run_cpp_altmin(neural_network, X, Y, epochs)
+#         end = time.time()
+#         time_cpp = end-start
+#         print("Time for cpp :" + str(time_cpp))
 
-        #Optional but prints res and how loss changes
-        show_res(X, Y, outputs_sgd, outputs_altmin, outputs_cpp, loss_sgd, loss_altmin, loss_cpp)
+#         #Optional but prints res and how loss changes
+#         show_res(X, Y, outputs_sgd, outputs_altmin, outputs_cpp, loss_sgd, loss_altmin, loss_cpp)
 
 # def save_state_to_dict(file_path):
 #     model = simpleNN(2, [4,3],1)

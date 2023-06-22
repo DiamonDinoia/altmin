@@ -278,8 +278,8 @@ public:
     ALTMIN_INLINE void add_to_vectors(int start_idx, int layer_idx, int end_idx, int derivative_idx) {
         weight_pairs.emplace_back(start_idx, layer_idx, end_idx, derivative_idx);
         weight_dL_douts.emplace_back(batch_size, layers[layer_idx].weight.rows());
-        dL_dWs.emplace_back(batch_size, layers[start_idx].weight.rows());
-        dL_dbs.emplace_back(batch_size, layers[start_idx].weight.rows());
+        dL_dWs.emplace_back(layers[layer_idx].weight.rows(), layers[layer_idx].weight.cols());
+        dL_dbs.emplace_back(layers[layer_idx].weight.rows(), 1);
     }
 
 
@@ -450,6 +450,7 @@ public:
 
                 case (Layer::layer_type::SIGMOID):
                     weight_dL_douts[derivative_idx] = weight_dL_douts[derivative_idx].cwiseProduct(layers[idx].dout);
+                    
                     break;
 
             }
@@ -585,10 +586,10 @@ public:
         for (size_t it = 0; it < n_iter_weights; it++) {
 
             // populate outputs
-
             if (first_layer) {
                 //weight_inputs[derivative_idx] = data;
                 calc_matrix_for_derivative(inputs, start_idx_parallel, end_idx_parallel + 1);
+                
                 weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(
                         layers[layer_idx_parallel].layer_output, layers[layer_idx_parallel].codes);
             } else {

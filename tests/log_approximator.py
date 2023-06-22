@@ -123,6 +123,7 @@ def show_res(X, Y, outputs_sgd, outputs_altmin, outputs_cpp, loss_sgd, loss_altm
     plt.plot(X, outputs_cpp, linewidth=2, marker='.', label="altmin cpp")
     plt.plot(X, outputs_sgd.detach(), linewidth=2, marker='.', label="altmin sgd")
     plt.legend()
+    plt.savefig('log_approximator_convergence.png')
     plt.show()
 
     plt.figure(figsize = (10,6))
@@ -131,6 +132,7 @@ def show_res(X, Y, outputs_sgd, outputs_altmin, outputs_cpp, loss_sgd, loss_altm
     plt.plot(loss_cpp, label="cpp")
     plt.plot(loss_sgd, label='sgd')
     plt.legend()
+    plt.savefig('log_approximator_loss.png')
     plt.show()
 
 
@@ -177,3 +179,4 @@ def main():
 
     show_res(X, Y, outputs_sgd, outputs_altmin, outputs_cpp, loss_altmin, loss_cpp, loss_sgd)
 
+#main()
