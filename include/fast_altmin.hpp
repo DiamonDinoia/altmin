@@ -29,9 +29,11 @@ ALTMIN_INLINE auto lin(
         const nanobind::DRef<Eigen::MatrixXd> &weight,
         const nanobind::DRef<Eigen::VectorXd> &bias) noexcept {
     Eigen::MatrixXd res = input * weight.transpose();
+    std::cout << res << std::endl;
     for (auto row : res.rowwise()){
         row+=bias;
     }
+    std::cout << res << std::endl;
     return res;
 }
 
@@ -45,14 +47,18 @@ ALTMIN_INLINE auto lin_no_transpose(
 
 ALTMIN_INLINE void matrix_mul(const nanobind::DRef<Eigen::MatrixXd> &input,
         const nanobind::DRef<Eigen::MatrixXd> &weight){
-            //Eigen::MatrixXd res = input * weight;
+            Eigen::MatrixXd res = input * weight;
         }
 
-ALTMIN_INLINE void matrix_mul_two(){
-        Eigen::MatrixXd input = Eigen::MatrixXd::Random(5,5000);
-        Eigen::MatrixXd weight = Eigen::MatrixXd::Random(25,5);
+ALTMIN_INLINE void matrix_mul_two(int n, int m, int a, int b){
+        
         Eigen::MatrixXd res;
+        Eigen::MatrixXd input(n,m);
+        Eigen::MatrixXd weight(a,b);
+
         for (int i =0; i < 5000;i++){
+            input = Eigen::MatrixXd::Random(n,m);
+            weight = Eigen::MatrixXd::Random(a,b);
             res = input*weight;
         }
 }

@@ -51,10 +51,10 @@ class TestLayers(unittest.TestCase):
     def test_lin(self):
         lin = nn.Linear(2, 4).double()
         in_tensor = torch.rand(1, 2, dtype=torch.double)
-        weight = lin.weight.data.transpose(1,0)
+        weight = lin.weight.data
         bias = lin.bias.data
         #bias = torch.reshape(lin.bias.data, (len(lin.bias.data), 1))
-        cpp_imp = torch.from_numpy(fast_altmin.lin_no_transpose(in_tensor,
+        cpp_imp = torch.from_numpy(fast_altmin.lin(in_tensor,
                                       weight, bias))
         python_imp = lin(in_tensor)
         check_equal(cpp_imp, python_imp, 10e8)
@@ -269,252 +269,252 @@ class TestLayers(unittest.TestCase):
 
 
 
-#class TestUpdateFunctions(unittest.TestCase):
+# class TestUpdateFunctions(unittest.TestCase):
 
     
 
-    # def test_forward(self):
+#     def test_forward(self):
        
-    #     in_tensor = torch.rand(4,2,dtype = torch.double)
-    #     model = simpleNN(2, [4,3],1)
-    #     model = get_mods(model)
-    #     model = model[1:]
+#         in_tensor = torch.rand(4,2,dtype = torch.double)
+#         model = simpleNN(2, [4,3],1)
+#         model = get_mods(model)
+#         model = model[1:]
 
-    #     neural_network = conv_model_to_class(model, nn.BCELoss(), in_tensor.size(0))
-    #     output_python, codes_python = get_codes(model, in_tensor)
-    #     output_cpp = neural_network.get_codes(in_tensor, True)
-    #     codes_cpp = neural_network.return_codes() 
+#         neural_network = conv_model_to_class(model, nn.BCELoss(), in_tensor.size(0))
+#         output_python, codes_python = get_codes(model, in_tensor)
+#         output_cpp = neural_network.get_codes(in_tensor, True)
+#         codes_cpp = neural_network.return_codes() 
 
-    #     #Check output 
-    #     check_equal(output_python, output_cpp, 10e6)
-    #     #check codes
-    #     for x in range(len(codes_python)):
-    #         check_equal(codes_python[x], codes_cpp[x], 10e6)
-
-
-    # def test_update_codes_BCELoss(self):
-    #     print("Codes:  ")
-    #     # Setup 
-    #     targets = torch.round(torch.rand(6, 1, dtype=torch.double))
-    #     code_one = torch.rand(6,4, dtype=torch.double) - 0.5
-    #     code_two = torch.rand(6,3, dtype=torch.double) - 0.5
-    #     codes_cpp = [code_one, code_two]
-    #     codes_python = [code_one.detach().clone(), code_two.detach().clone()]
-    #     n_iter = 1
-    #     lr = 0.3
-    #     mu = 0.003
-    #     criterion = nn.BCELoss()
-
-    #     # Model setup
-    #     model_python = simpleNN(2, [4,3],1)
-    #     model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
-    #                  scheduler=lambda epoch: 1/2**(epoch//8))
-    #     model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
-    #     model_python = model_python[1:]
-
-    #     print(targets.shape[0])
-    #     neural_network = conv_model_to_class(model_python, criterion, targets.shape[0])
-    #     neural_network.set_codes(codes_cpp)
-
-    #     # Python
-    #     for it in range(1):
-    #         update_codes(codes_python, model_python, targets, criterion, mu, 0, n_iter, lr)
-
-    #     #cpp
-    #     for it in range(1):     
-    #         neural_network.update_codes(targets)
-    #     codes_cpp = neural_network.return_codes() 
-
-    #     #Assert codes are equal
-    #     for x in range(len(codes_cpp)):
-    #         check_equal(codes_cpp[x], codes_python[x], 10e6)
-
-    # def test_update_codes_CrossEntropyLoss(self):
-    #      # Setup 
-    #     targets = torch.randint(0, 4, (4,))
-    #     code_one = torch.rand(4,100, dtype=torch.double) - 0.5
-    #     code_two = torch.rand(4,100, dtype=torch.double) - 0.5
-    #     codes_cpp = [code_one, code_two]
-    #     codes_python = [code_one.detach().clone(), code_two.detach().clone()]
-    #     n_iter = 1
-    #     lr = 0.3
-    #     mu = 0.003
+#         #Check output 
+#         check_equal(output_python, output_cpp, 10e6)
+#         #check codes
+#         for x in range(len(codes_python)):
+#             check_equal(codes_python[x], codes_cpp[x], 10e6)
 
 
-    #     # Model setup
-    #     model_python = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()
-    #     model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
-    #                  scheduler=lambda epoch: 1/2**(epoch//8))
-    #     model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
-    #     model_python = model_python[1:]
+#     def test_update_codes_BCELoss(self):
+#         print("Codes:  ")
+#         # Setup 
+#         targets = torch.round(torch.rand(6, 1, dtype=torch.double))
+#         code_one = torch.rand(6,4, dtype=torch.double) - 0.5
+#         code_two = torch.rand(6,3, dtype=torch.double) - 0.5
+#         codes_cpp = [code_one, code_two]
+#         codes_python = [code_one.detach().clone(), code_two.detach().clone()]
+#         n_iter = 1
+#         lr = 0.3
+#         mu = 0.003
+#         criterion = nn.BCELoss()
+
+#         # Model setup
+#         model_python = simpleNN(2, [4,3],1)
+#         model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+#                      scheduler=lambda epoch: 1/2**(epoch//8))
+#         model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+#         model_python = model_python[1:]
+
+#         print(targets.shape[0])
+#         neural_network = conv_model_to_class(model_python, criterion, targets.shape[0])
+#         neural_network.set_codes(codes_cpp)
+
+#         # Python
+#         for it in range(1):
+#             update_codes(codes_python, model_python, targets, criterion, mu, 0, n_iter, lr)
+
+#         #cpp
+#         for it in range(1):     
+#             neural_network.update_codes(targets)
+#         codes_cpp = neural_network.return_codes() 
+
+#         #Assert codes are equal
+#         for x in range(len(codes_cpp)):
+#             check_equal(codes_cpp[x], codes_python[x], 10e6)
+
+#     def test_update_codes_CrossEntropyLoss(self):
+#          # Setup 
+#         targets = torch.randint(0, 4, (4,))
+#         code_one = torch.rand(4,100, dtype=torch.double) - 0.5
+#         code_two = torch.rand(4,100, dtype=torch.double) - 0.5
+#         codes_cpp = [code_one, code_two]
+#         codes_python = [code_one.detach().clone(), code_two.detach().clone()]
+#         n_iter = 1
+#         lr = 0.3
+#         mu = 0.003
+
+
+#         # Model setup
+#         model_python = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()
+#         model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+#                      scheduler=lambda epoch: 1/2**(epoch//8))
+#         model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+#         model_python = model_python[1:]
         
-    #     neural_network = conv_model_to_class(model_python, nn.CrossEntropyLoss(), targets.shape[0])
-    #     neural_network.set_codes(codes_cpp)
+#         neural_network = conv_model_to_class(model_python, nn.CrossEntropyLoss(), targets.shape[0])
+#         neural_network.set_codes(codes_cpp)
         
-    #     #python
-    #     for it in range(1):
-    #         update_codes(codes_python, model_python, targets, nn.CrossEntropyLoss(), mu, 0, n_iter, lr)
+#         #python
+#         for it in range(1):
+#             update_codes(codes_python, model_python, targets, nn.CrossEntropyLoss(), mu, 0, n_iter, lr)
 
-    #     #cpp
-    #     targets = targets.double()
-    #     targets = targets.reshape(1,len(targets))
-    #     for it in range(1):     
-    #         neural_network.update_codes(targets)
-    #     codes_cpp = neural_network.return_codes() 
+#         #cpp
+#         targets = targets.double()
+#         targets = targets.reshape(1,len(targets))
+#         for it in range(1):     
+#             neural_network.update_codes(targets)
+#         codes_cpp = neural_network.return_codes() 
         
-    #     # Assert codes are same
-    #     for x in range(len(codes_cpp)):
-    #         check_equal(codes_python[x], codes_cpp[x], 10e6)
+#         # Assert codes are same
+#         for x in range(len(codes_cpp)):
+#             check_equal(codes_python[x], codes_cpp[x], 10e6)
 
 
 
-    # def test_update_codes_MSELoss(self):
-    #     # Setup 
-    #     targets = torch.rand(4,1,dtype = torch.double)
-    #     code_one = torch.rand(4,5, dtype=torch.double) - 0.5
-    #     code_two = torch.rand(4,5, dtype=torch.double) - 0.5
-    #     code_three = torch.rand(4,5, dtype=torch.double) - 0.5
-    #     codes_cpp = [code_one, code_two, code_three]
-    #     codes_python = [code_one.detach().clone(), code_two.detach().clone(), code_three.detach().clone()]
-    #     n_iter = 1
-    #     lr = 0.3
-    #     mu = 0.003
-    #     criterion = nn.MSELoss()
+#     def test_update_codes_MSELoss(self):
+#         # Setup 
+#         targets = torch.rand(4,1,dtype = torch.double)
+#         code_one = torch.rand(4,5, dtype=torch.double) - 0.5
+#         code_two = torch.rand(4,5, dtype=torch.double) - 0.5
+#         code_three = torch.rand(4,5, dtype=torch.double) - 0.5
+#         codes_cpp = [code_one, code_two, code_three]
+#         codes_python = [code_one.detach().clone(), code_two.detach().clone(), code_three.detach().clone()]
+#         n_iter = 1
+#         lr = 0.3
+#         mu = 0.003
+#         criterion = nn.MSELoss()
 
-    #     # Model setup
-    #     model_python = LogApproximator(5)
-    #     model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
-    #                     scheduler=lambda epoch: 1/2**(epoch//8))
-    #     model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
-    #     model_python = model_python[1:]
-    #     neural_network = conv_model_to_class(model_python, criterion, targets.shape[0])
-    #     neural_network.set_codes(codes_cpp)
+#         # Model setup
+#         model_python = LogApproximator(5)
+#         model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+#                         scheduler=lambda epoch: 1/2**(epoch//8))
+#         model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+#         model_python = model_python[1:]
+#         neural_network = conv_model_to_class(model_python, criterion, targets.shape[0])
+#         neural_network.set_codes(codes_cpp)
 
 
-    #     #python
-    #     for it in range(5):
-    #         update_codes(codes_python, model_python, targets, criterion, mu, 0, n_iter, lr)
+#         #python
+#         for it in range(5):
+#             update_codes(codes_python, model_python, targets, criterion, mu, 0, n_iter, lr)
 
-    #     #cpp
-    #     for it in range(5):     
-    #         neural_network.update_codes(targets)
-    #     codes_cpp = neural_network.return_codes() 
+#         #cpp
+#         for it in range(5):     
+#             neural_network.update_codes(targets)
+#         codes_cpp = neural_network.return_codes() 
         
-    #     # print(codes_cpp[-1].shape)
-    #     # Assert codes are same
-    #     for x in range(len(codes_cpp)):
-    #         check_equal(codes_python[x], codes_cpp[x], 10e6)
+#         # print(codes_cpp[-1].shape)
+#         # Assert codes are same
+#         for x in range(len(codes_cpp)):
+#             check_equal(codes_python[x], codes_cpp[x], 10e6)
 
 
 
-    # def test_update_weights_BCELoss(self):
-    #     print("\n\nWeights: ")
-    #     # Setup 
-    #     inputs = torch.rand(5000,2,dtype = torch.double)
-    #     targets = torch.round(torch.rand(5000, 1, dtype=torch.double))
-    #     codes = [torch.rand(5000,4, dtype=torch.double).detach(), torch.rand(5000,3, dtype=torch.double).detach()]
-    #     n_iter = 1
+#     def test_update_weights_BCELoss(self):
+#         print("\n\nWeights: ")
+#         # Setup 
+#         inputs = torch.rand(5000,2,dtype = torch.double)
+#         targets = torch.round(torch.rand(5000, 1, dtype=torch.double))
+#         codes = [torch.rand(5000,4, dtype=torch.double).detach(), torch.rand(5000,3, dtype=torch.double).detach()]
+#         n_iter = 1
 
-    #     # Model setup
-    #     model_python = simpleNN(2, [4,3],1)
-    #     model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
-    #                     scheduler=lambda epoch: 1/2**(epoch//8))
-    #     model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
-    #     model_python = model_python[1:]
-    #     # cpp model setup
-    #     neural_network = conv_model_to_class(model_python, nn.BCELoss(), targets.shape[0], 1, n_iter)
-    #     neural_network.set_codes(codes)
-    #     initialise_weights_and_biases(model_python, neural_network)
+#         # Model setup
+#         model_python = simpleNN(2, [4,3],1)
+#         model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+#                         scheduler=lambda epoch: 1/2**(epoch//8))
+#         model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+#         model_python = model_python[1:]
+#         # cpp model setup
+#         neural_network = conv_model_to_class(model_python, nn.BCELoss(), targets.shape[0], 1, n_iter)
+#         neural_network.set_codes(codes)
+#         initialise_weights_and_biases(model_python, neural_network)
 
-    #     # python
-    #     for it in range(2):
-    #         update_hidden_weights_adam_(model_python, inputs, codes, lambda_w=0, n_iter=n_iter)
-    #         update_last_layer_(model_python[-1], codes[-1], targets, nn.BCELoss(), n_iter)
+#         # python
+#         for it in range(2):
+#             update_hidden_weights_adam_(model_python, inputs, codes, lambda_w=0, n_iter=n_iter)
+#             update_last_layer_(model_python[-1], codes[-1], targets, nn.BCELoss(), n_iter)
 
-    #     # cpp
+#         # cpp
 
-    #     for it in range(2):
-    #         neural_network.update_weights(inputs, targets)
+#         for it in range(2):
+#             neural_network.update_weights(inputs, targets)
         
-    #     weights = neural_network.return_weights()
-    #     biases = neural_network.return_bias()
+#         weights = neural_network.return_weights()
+#         biases = neural_network.return_bias()
         
        
-    #     # Assert weights and biases updated the same
-    #     check_equal_weights_and_bias(model_python, weights, biases, 10e9)
+#         # Assert weights and biases updated the same
+#         check_equal_weights_and_bias(model_python, weights, biases, 10e9)
 
 
-    # def test_update_weights_MSELoss(self):
-    #     # Setup 
-    #     inputs = torch.rand(4,1,dtype = torch.double)
-    #     targets = torch.round(torch.rand(4, 1, dtype=torch.double))
-    #     codes = [torch.rand(4,5, dtype=torch.double).detach(), torch.rand(4,5, dtype=torch.double).detach(), torch.rand(4,5, dtype=torch.double).detach()]
-    #     n_iter = 1
+#     def test_update_weights_MSELoss(self):
+#         # Setup 
+#         inputs = torch.rand(4,1,dtype = torch.double)
+#         targets = torch.round(torch.rand(4, 1, dtype=torch.double))
+#         codes = [torch.rand(4,5, dtype=torch.double).detach(), torch.rand(4,5, dtype=torch.double).detach(), torch.rand(4,5, dtype=torch.double).detach()]
+#         n_iter = 1
 
-    #     # Model setup
-    #     model_python = LogApproximator(5)
-    #     model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.001},
-    #                     scheduler=lambda epoch: 1/2**(epoch//8))
-    #     model_python[-1].optimizer.param_groups[0]['lr'] = 0.001
-    #     model_python = model_python[1:]
+#         # Model setup
+#         model_python = LogApproximator(5)
+#         model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.001},
+#                         scheduler=lambda epoch: 1/2**(epoch//8))
+#         model_python[-1].optimizer.param_groups[0]['lr'] = 0.001
+#         model_python = model_python[1:]
         
-    #     # cpp model setup
-    #     neural_network = conv_model_to_class(model_python, nn.MSELoss(), targets.shape[0], 1, n_iter, 0.3, 0.003, 0.9, 0.001)
-    #     neural_network.set_codes(codes)
-    #     initialise_weights_and_biases(model_python, neural_network)
+#         # cpp model setup
+#         neural_network = conv_model_to_class(model_python, nn.MSELoss(), targets.shape[0], 1, n_iter, 0.3, 0.003, 0.9, 0.001)
+#         neural_network.set_codes(codes)
+#         initialise_weights_and_biases(model_python, neural_network)
 
-    #     # python
-    #     for it in range(1):
-    #         update_hidden_weights_adam_(model_python, inputs, codes, lambda_w=0, n_iter=n_iter)
-    #         update_last_layer_(model_python[-1], codes[-1], targets, nn.MSELoss(), n_iter)
+#         # python
+#         for it in range(1):
+#             update_hidden_weights_adam_(model_python, inputs, codes, lambda_w=0, n_iter=n_iter)
+#             update_last_layer_(model_python[-1], codes[-1], targets, nn.MSELoss(), n_iter)
 
-    #     # cpp
-    #     for it in range(1):
-    #         neural_network.update_weights(inputs, targets)
+#         # cpp
+#         for it in range(1):
+#             neural_network.update_weights(inputs, targets)
         
-    #     weights = neural_network.return_weights()
-    #     biases = neural_network.return_bias()
+#         weights = neural_network.return_weights()
+#         biases = neural_network.return_bias()
 
-    #     # Assert weights and biases updated the same
-    #     check_equal_weights_and_bias(model_python, weights, biases, 10e6)
+#         # Assert weights and biases updated the same
+#         check_equal_weights_and_bias(model_python, weights, biases, 10e6)
 
 
-    # def test_update_weights_CrossEntropyLoss(self):
-    #     # Setup 
-    #     inputs = torch.rand(4, 784, dtype=torch.double)
-    #     targets = torch.randint(0, 9, (4,))
-    #     codes = [torch.rand(4,100, dtype=torch.double).detach(), torch.rand(4,100, dtype=torch.double).detach()]
-    #     n_iter = 2
-    #     criterion = nn.CrossEntropyLoss()
+#     def test_update_weights_CrossEntropyLoss(self):
+#         # Setup 
+#         inputs = torch.rand(4, 784, dtype=torch.double)
+#         targets = torch.randint(0, 9, (4,))
+#         codes = [torch.rand(4,100, dtype=torch.double).detach(), torch.rand(4,100, dtype=torch.double).detach()]
+#         n_iter = 2
+#         criterion = nn.CrossEntropyLoss()
 
-    #     # Model setup
-    #     model_python = FFNet(784, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()
-    #     model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
-    #                     scheduler=lambda epoch: 1/2**(epoch//8))
-    #     model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
-    #     model_python = model_python[1:]
+#         # Model setup
+#         model_python = FFNet(784, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()
+#         model_python = get_mods(model_python, optimizer='Adam', optimizer_params={'lr': 0.008},
+#                         scheduler=lambda epoch: 1/2**(epoch//8))
+#         model_python[-1].optimizer.param_groups[0]['lr'] = 0.008
+#         model_python = model_python[1:]
         
-    #     # cpp model setup
-    #     neural_network = conv_model_to_class(model_python, criterion, targets.shape[0],1, n_iter)
-    #     neural_network.set_codes(codes)
-    #     initialise_weights_and_biases(model_python, neural_network)
+#         # cpp model setup
+#         neural_network = conv_model_to_class(model_python, criterion, targets.shape[0],1, n_iter)
+#         neural_network.set_codes(codes)
+#         initialise_weights_and_biases(model_python, neural_network)
 
-    #     # python
-    #     for it in range(2):
-    #         update_hidden_weights_adam_(model_python, inputs, codes, lambda_w=0, n_iter=n_iter)
-    #         update_last_layer_(model_python[-1], codes[-1], targets, criterion, n_iter)
+#         # python
+#         for it in range(2):
+#             update_hidden_weights_adam_(model_python, inputs, codes, lambda_w=0, n_iter=n_iter)
+#             update_last_layer_(model_python[-1], codes[-1], targets, criterion, n_iter)
 
-    #     # cpp
-    #     targets = targets.double()
-    #     targets = targets.reshape(1,len(targets))
-    #     for it in range(2):
-    #         neural_network.update_weights(inputs, targets)
+#         # cpp
+#         targets = targets.double()
+#         targets = targets.reshape(1,len(targets))
+#         for it in range(2):
+#             neural_network.update_weights(inputs, targets)
         
-    #     weights = neural_network.return_weights()
-    #     biases = neural_network.return_bias()
+#         weights = neural_network.return_weights()
+#         biases = neural_network.return_bias()
 
-    #     # Assert weights and biases updated the same
-    #     check_equal_weights_and_bias(model_python, weights, biases, 10e6)
+#         # Assert weights and biases updated the same
+#         check_equal_weights_and_bias(model_python, weights, biases, 10e6)
 
 
 import time 
@@ -732,12 +732,26 @@ class BenchmarkForward(unittest.TestCase):
     #     end=time.time()
     #     print("Python forward: "+(str(end-start)))
 
-    #def test_lin_time(self):
-        # start =time.time()
-        # fast_altmin.matrix_mul_two()
-        # end = time.time()
-        # print("Fast mat mul cpp "+str(end-start))
+    def test_lin_time(self):
+        
+        n = 5000 
+        m = 5
+        a = 5
+        b = 25
+        start =time.time()
+        fast_altmin.matrix_mul_two(m,n,b,a)
+        end = time.time()
+        print("cpp amt mul "+str(end-start))
 
+        start=time.time()
+        for i in range(5000):
+            input = torch.rand(n,m)
+            weight = torch.rand(a,b)
+            res = torch.matmul(input,weight)
+
+        end = time.time()
+        print("py mat mul"+str(end-start))
+        
         # model = nn.Linear(5,25).double()
         # weight = model.weight.data.transpose(1,0)        
         # bias = model.bias.data
