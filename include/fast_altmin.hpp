@@ -28,62 +28,77 @@ ALTMIN_INLINE auto lin(
         const nanobind::DRef<Eigen::MatrixXd> &input,
         const nanobind::DRef<Eigen::MatrixXd> &weight,
         const nanobind::DRef<Eigen::VectorXd> &bias) noexcept {
-    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> res =
-            (input * weight.transpose());
-    for (long i = 0; i < res.rows(); ++i) { res.row(i) += bias; }
-    return res;
-}
-
-
-// Maybe should iterate in the opposite direction as should go in storage order
-// but again I'll come back to this
-// Also note the reference to the data is passed and the data is changed in
-// place so nothing returned
-ALTMIN_INLINE void ReLU_inplace(nanobind::DRef<Eigen::MatrixXd> input) noexcept {
-    const auto N = input.rows();
-    const auto M = input.cols();
-    for (auto i = 0L; i < N; ++i) {
-        for (auto j = 0L; j < M; ++j) {
-            input(i, j) = std::max(input(i, j), 0.0);
-        }
-    }
-}
-
-ALTMIN_INLINE auto ReLU(const nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
-    Eigen::MatrixXd res = input;
-    ReLU_inplace(res);
-    return res;
-}
-
-
-
-// Maybe should iterate in the opposite direction as should go in storage order
-// but again I'll come back to this
-// Also note the reference to the data is passed and the data is changed in
-// place so nothing returned
-ALTMIN_INLINE auto sigmoid(const nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
-    const auto N = input.rows();
-    const auto M = input.cols();
-    Eigen::MatrixXd res(N, M);
-    for (auto i = 0l; i < N; ++i) {
-        for (auto j = 0l; j < M; ++j) {
-            res(i, j) = 1.0 / (1.0 + std::exp(-input(i, j)));
-        }
+    Eigen::MatrixXd res = input * weight.transpose();
+    for (auto row : res.rowwise()){
+        row+=bias;
     }
     return res;
 }
 
+ALTMIN_INLINE void lin_no_transpose(
+        const nanobind::DRef<Eigen::MatrixXd> &input,
+        const nanobind::DRef<Eigen::MatrixXd> &weight,
+        const nanobind::DRef<Eigen::VectorXd> &bias) noexcept {
+    Eigen::MatrixXd res = input * weight;
+    // for (auto row : res.rowwise()){
+    //     row+=bias;
+    // }
+    //return res;
+}
+
+ALTMIN_INLINE void matrix_mul(const nanobind::DRef<Eigen::MatrixXd> &input,
+        const nanobind::DRef<Eigen::MatrixXd> &weight){
+            //Eigen::MatrixXd res = input * weight;
+        }
+
+ALTMIN_INLINE void matrix_mul_two(){
+        Eigen::MatrixXd input = Eigen::MatrixXd::Random(5,5000);
+        Eigen::MatrixXd weight = Eigen::MatrixXd::Random(25,5);
+        Eigen::MatrixXd res;
+        for (int i =0; i < 5000;i++){
+            res = input*weight;
+        }
+}
+
+// ALTMIN_INLINE void lin_three(
+//         const nanobind::DRef<Eigen::MatrixXd> &input,
+//         const nanobind::DRef<Eigen::MatrixXd> &weight,
+//         const nanobind::DRef<Eigen::VectorXd> &bias,
+//         Eigen::MatrixXd &out) noexcept {
+//     out = (input * weight.transpose());
+//     for (auto row : out.rowwise()){
+//         row +=bias;
+//     }
+// }
+
+// ALTMIN_INLINE void lin_four(
+//         const nanobind::DRef<Eigen::MatrixXd> &input,
+//         const nanobind::DRef<Eigen::MatrixXd> &weight,
+//         const nanobind::DRef<Eigen::VectorXd> &bias,
+//         Eigen::MatrixXd &out) noexcept {
+//     out = (input * weight.transpose());
+//     for (auto row : out.rowwise()){
+//         row.array() +=bias.array();
+//     }
+// }
+
 // Maybe should iterate in the opposite direction as should go in storage order
 // but again I'll come back to this
 // Also note the reference to the data is passed and the data is changed in
 // place so nothing returned
-ALTMIN_INLINE void sigmoid_inplace(nanobind::DRef<Eigen::MatrixXd> input) noexcept {
-    const auto N = input.rows();
-    const auto M = input.cols();
-    for (auto i = 0l; i < N; ++i) {
-        for (auto j = 0l; j < M; ++j) {
-            input(i, j) = 1.0 / (1.0 + std::exp(-input(i, j)));
-        }
+ALTMIN_INLINE void ReLU(nanobind::DRef<Eigen::MatrixXd> input) noexcept {
+    for (auto i = 0L; i<input.size(); ++i){
+        *(input.data()+i) =  std::max(*(input.data()+i), 0.0);
+    }
+}
+
+// Maybe should iterate in the opposite direction as should go in storage order
+// but again I'll come back to this
+// Also note the reference to the data is passed and the data is changed in
+// place so nothing returned
+ALTMIN_INLINE void sigmoid(nanobind::DRef<Eigen::MatrixXd> input) noexcept {
+    for (auto i = 0L; i<input.size(); ++i){
+        *(input.data()+i) =  1.0 / (1.0 + std::exp(-*(input.data()+i)));
     }
 }
 
@@ -92,6 +107,8 @@ ALTMIN_INLINE double BCELoss(const nanobind::DRef<Eigen::MatrixXd> &predictions,
     const auto N = predictions.rows();
     const auto M = predictions.cols();
     double tot = 0.0;
+    double sum = 0.0; 
+
     for (long i = 0; i < N; ++i) {
         double sum = 0.0;
         for (long j = 0; j < M; ++j) {
@@ -125,43 +142,16 @@ ALTMIN_INLINE double MSELoss(const nanobind::DRef<Eigen::MatrixXd> &predictions,
 }
 
 ALTMIN_INLINE void log_softmax(nanobind::DRef<Eigen::MatrixXd> input) noexcept {
-    const auto N = input.rows();
-    const auto M = input.cols();
-    // TODO: Probably can be done using eigen instead of std::vector and various loops
-    std::vector<double> exps(M);
-    for (long i = 0; i < N; ++i) {
-        for (long j = 0; j < M; ++j) {
-            exps[j] = std::exp(input(i, j));
-        }
-        double sum_exps = 0.0;
-        for (const auto exp: exps) {
-            sum_exps += exp;
-        }
-        const auto inv_sum_exps = 1.0 / sum_exps;
-        for (long j = 0; j < M; ++j) {
-            input(i, j) = std::log(exps[j] * inv_sum_exps);
-        }
+    for (auto row : input.rowwise()){
+        row = (row.array().exp() * (1/row.array().exp().sum())).log();
     }
 
 }
 
-ALTMIN_INLINE void softmax(nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
-    const auto N = input.rows();
-    const auto M = input.cols();
-    std::vector<double> exps(M);
 
-    for (long i = 0; i < N; ++i) {
-        for (long j = 0; j < M; ++j) {
-            exps[j] = std::exp(input(i, j));
-        }
-        double sum_exps = 0.0;
-        for (auto exp: exps) {
-            sum_exps += exp;
-        }
-        const auto inv_sum_exps = 1.0 / sum_exps;
-        for (long j = 0; j < M; ++j) {
-            input(i, j) = (exps[j] * inv_sum_exps);
-        }
+ALTMIN_INLINE void softmax(nanobind::DRef<Eigen::MatrixXd> &input) noexcept {
+    for (auto row : input.rowwise()){
+        row = row.array().exp() * (1/row.array().exp().sum());
     }
 
 }
@@ -196,8 +186,8 @@ ALTMIN_INLINE double cross_entropy_loss(nanobind::DRef<Eigen::MatrixXd> input,
 
 ALTMIN_INLINE auto differentiate_sigmoid(const nanobind::DRef<Eigen::MatrixXd> &x) noexcept {
     const auto ones = Eigen::MatrixXd::Constant(x.rows(), x.cols(), 1.0);
-    const auto tmp = sigmoid(x);
-    return tmp.cwiseProduct(ones - tmp);
+    sigmoid(x);
+    return x.cwiseProduct(ones - x);
 }
 
 ALTMIN_INLINE auto differentiate_ReLU(const nanobind::DRef<Eigen::MatrixXd> &x) noexcept {

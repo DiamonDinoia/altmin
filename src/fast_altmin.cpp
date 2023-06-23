@@ -64,9 +64,9 @@ public:
     layer_type layer;
     bool has_codes;
     Eigen::MatrixXd dout;
+    Eigen::MatrixXd dw;
     //Eigen::MatrixXd dL_dc;
-    Eigen::MatrixXd dout_dW;
-    int dout_db = false;
+    
 
     // Constructor for linear layers
     Layer(const layer_type layer_type, const int batch_size, const int n, const int m, Eigen::MatrixXd weight,
@@ -88,6 +88,11 @@ public:
             weight_v_t_correct(Eigen::MatrixXd::Zero(n, m)),
             bias_m(Eigen::VectorXd::Zero(m)),
             bias_v(Eigen::VectorXd::Zero(m)),
+
+            dout(n,m),
+            dw(batch_size, m ),
+
+            
             // Paremeters used by adam
             //Used to initialise the moments of the gradient and then set to false
             init_vals(true),
@@ -102,25 +107,26 @@ public:
     Layer(const layer_type type, const int batch_size, const int n, const double lr) :
             layer(type), has_codes(false),
             lr(lr),
-            layer_output(batch_size, n) {}
+            layer_output(batch_size, n),
+            dout(batch_size, n) {}
 
     // Low priority: Change so returns a string
     void print_info() {
         switch (layer) {
             case (Layer::layer_type::RELU):
-                std::cout << "ReLU" << std::endl;
-                std::cout << "layer out: (" << layer_output.rows() << " , " << layer_output.cols() << ")" << std::endl;
+                std::cout << "ReLU   dout: (" << dout.rows() << " , " << dout.cols() << ")   layer out: (" << layer_output.rows() << " , " << layer_output.cols() << ")" << std::endl;
                 break;
             case (Layer::layer_type::LINEAR):
-                std::cout << "Lin: ( " << weight.rows() << " , " << weight.cols() << ") has_codes: " << has_codes
-                          << std::endl;
-                std::cout << "layer out: (" << layer_output.rows() << " , " << layer_output.cols() << ")" << std::endl;
+                std::cout << "Lin: ( " << weight.rows() << " , " << weight.cols() << ") has_codes: " << has_codes 
+                << " dout: (" << dout.rows() << " , " << dout.cols() << ") layer out: (" << layer_output.rows() << " , " << layer_output.cols() << ")"
+                << " dw: (" << dw.rows() << " , " << dw.cols() << ") " << std::endl;
                 break;
             case (Layer::layer_type::SIGMOID):
-                std::cout << "Sigmoid: " << std::endl;
-                std::cout << "layer out: (" << layer_output.rows() << " , " << layer_output.cols() << ")" << std::endl;
+                std::cout << "Sigmoid: dout: (" << dout.rows() << " , " << dout.cols() << ") layer out: (" << layer_output.rows() << " , " << layer_output.cols() << ")" << std::endl;
                 break;
         }
+
+        //std::cout << "layer out: (" << layer_output.rows() << " , " << layer_output.cols() << ")" << std::endl;
     }
 
     //
@@ -132,7 +138,7 @@ public:
         switch (layer) {
             case (Layer::layer_type::RELU):
                 layer_output = inputs;
-                ReLU_inplace(layer_output);
+                ReLU(layer_output);
                 break;
 
             case (Layer::layer_type::LINEAR):
@@ -144,7 +150,7 @@ public:
 
             case (Layer::layer_type::SIGMOID):
                 layer_output = inputs;
-                sigmoid_inplace(layer_output);
+                sigmoid(layer_output);
                 break;
 
         }
@@ -196,18 +202,15 @@ public:
                 if (code_derivative) {
                     dout = weight;
                 } else {
-                    //Only need one of these
-                    dout = inputs;
-                    dout_dW = inputs;
-                    //don't need this but don't have time to fix
-                    dout_db = 1;
+                    dw = inputs;
+                    
                 }
                 break;
             case (Layer::layer_type::SIGMOID):
-                dout = inputs;
-                dout = differentiate_sigmoid(dout);
+                dout = differentiate_sigmoid(inputs);
                 break;
         }
+        
     }
 
 
@@ -244,9 +247,9 @@ public:
                   double mu, double momentum) :
     ////////// Model hyperparemters ////////////////////////////////////////////////////////////////////////////////////
             n_iter_codes(n_iter_codes), n_iter_weights(n_iter_weights), lr_codes(lr_codes), mu(mu), momentum(momentum),
-            loss_fn(loss_fn), batch_size(batch_size),
+            loss_fn(loss_fn), batch_size(batch_size){}
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            inputs(batch_size, m) {}
+             
 
     // Create a non linear layer and add to layers vector
     ALTMIN_INLINE void push_back_non_lin_layer(const Layer::layer_type layer_type, const int batch_size,
@@ -269,6 +272,15 @@ public:
     int get_idx_next_layer_with_codes(int idx) {
         for (int index = idx + 1; index < layers.size(); index++) {
             if (layers[index].has_codes) {
+                return index;
+            }
+        }
+        return static_cast<int>(layers.size() - 1);
+    }
+
+    int get_idx_next_lin_layer(int idx) {
+        for (int index = idx + 1; index < layers.size(); index++) {
+            if (layers[index].layer == Layer::layer_type::LINEAR) {
                 return index;
             }
         }
@@ -300,6 +312,9 @@ public:
                     }
                     end_idx = get_idx_next_layer_with_codes(idx);
                     code_pairs.insert(code_pairs.begin(), std::make_tuple(idx, end_idx));
+                    //could be inserted and then inc the code index instead of dec
+                    codes_dL_douts_one.insert(codes_dL_douts_one.begin(), Eigen::MatrixXd(batch_size, layers[get_idx_next_lin_layer(idx)].weight.rows()));
+                    codes_dL_douts_two.insert(codes_dL_douts_two.begin(), Eigen::MatrixXd(batch_size, layers[idx].weight.rows()));
                     add_to_vectors(start_idx, idx, idx, derivative_idx);
                     derivative_idx += 1;
                     start_idx = idx;
@@ -418,21 +433,22 @@ public:
     //Apply the chain rule to calculate dw, db or dc depending on bool code_derivative
     ALTMIN_INLINE void apply_chain_rule(const bool code_derivative) noexcept {
         for (int idx = end_idx; idx > start_idx; idx--) {
+                
             switch (layers[idx].layer) {
                 case (Layer::layer_type::RELU):
-                    dL_dout = dL_dout.cwiseProduct(layers[idx].dout);
+                    codes_dL_douts_two[dL_dc_index] =  codes_dL_douts_two[dL_dc_index].cwiseProduct(layers[idx].dout);
                     break;
                 case (Layer::layer_type::LINEAR):
-                    dL_dout = dL_dout * layers[idx].dout;
+                    codes_dL_douts_two[dL_dc_index] =  codes_dL_douts_one[dL_dc_index] * layers[idx].dout;
                     break;
                 case (Layer::layer_type::SIGMOID):
-                    dL_dout = dL_dout.cwiseProduct(layers[idx].dout);
+                    codes_dL_douts_one[dL_dc_index] =  codes_dL_douts_one[dL_dc_index].cwiseProduct(layers[idx].dout);
                     break;
 
             }
 
         }
-        dL_dc = dL_dout;
+
     }
 
     ALTMIN_INLINE void apply_chain_rule_weights(const bool code_derivative, const int start_idx, const int end_idx,
@@ -444,7 +460,7 @@ public:
                     weight_dL_douts[derivative_idx] = weight_dL_douts[derivative_idx].cwiseProduct(layers[idx].dout);
                     break;
                 case (Layer::layer_type::LINEAR):
-                    dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * layers[idx].dout;
+                    dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * layers[idx].dw;
                     dL_dbs[derivative_idx] = weight_dL_douts[derivative_idx].colwise().sum();
                     return;
 
@@ -467,8 +483,7 @@ public:
                         const int end_idx, const int derivative_idx) noexcept {
 
         if (start_idx == end_idx) {
-            layers[end_idx].differentiate_layer(inputs, code_derivative);
-            dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * layers[start_idx].dout_dW;
+            dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * inputs;
             dL_dbs[derivative_idx] = weight_dL_douts[derivative_idx].colwise().sum();
             return;
         } else {
@@ -518,24 +533,24 @@ public:
             class_labels = Eigen::VectorXd{targets.reshaped()};
         }
 
+        dL_dc_index = 0;
+
         for (auto indexes: code_pairs) {
             start_idx = std::get<0>(indexes);
             end_idx = std::get<1>(indexes);
             for (size_t it = 0; it < n_iter_codes; it++) {
-
-                inputs = layers[start_idx].codes;
-                calc_matrix_for_derivative(inputs, start_idx + 1, end_idx + 1);
+                calc_matrix_for_derivative(layers[start_idx].codes, start_idx + 1, end_idx + 1);
 
                 if (last_layer) {
                     switch (loss_fn) {
                         case (NeuralNetwork::loss_function::BCELoss):
-                            dL_dout = (1.0 / mu) * differentiate_BCELoss(layers[end_idx].layer_output, targets);
+                            codes_dL_douts_one[dL_dc_index] = (1.0 / mu) * differentiate_BCELoss(layers[end_idx].layer_output, targets);
                             break;
                         case (NeuralNetwork::loss_function::MSELoss):
-                            dL_dout = (1.0 / mu) * differentiate_MSELoss(layers[end_idx].layer_output, targets);
+                            codes_dL_douts_one[dL_dc_index] = (1.0 / mu) * differentiate_MSELoss(layers[end_idx].layer_output, targets);
                             break;
                         case (NeuralNetwork::loss_function::CrossEntropyLoss):
-                            dL_dout = (1.0 / mu) * differentiate_CrossEntropyLoss(
+                           codes_dL_douts_one[dL_dc_index] = (1.0 / mu) * differentiate_CrossEntropyLoss(
                                     layers[end_idx].layer_output, class_labels,
                                     static_cast<int>(layers[end_idx].layer_output.cols()));
                             break;
@@ -544,15 +559,16 @@ public:
                             break;
                     }
                 } else {
-                    dL_dout = differentiate_MSELoss(layers[idx_last_code].layer_output, layers[idx_last_code].codes);
+                    codes_dL_douts_one[dL_dc_index] = differentiate_MSELoss(layers[idx_last_code].layer_output, layers[idx_last_code].codes);
                 }
-
                 last_layer = false;
                 calculate_gradients(layers[start_idx].codes, true, start_idx, end_idx, -1);
-                layers[start_idx].codes = layers[start_idx].codes - (((1.0 + momentum) * lr_codes) * dL_dc);
+                layers[start_idx].codes = layers[start_idx].codes - (((1.0 + momentum) * lr_codes) * codes_dL_douts_two[dL_dc_index]);
                 idx_last_code = start_idx;
             }
+            
         }
+        dL_dc_index +=1;
     }
 
     // //data gets changed in place and is used in multiple places so would need to be copied anyway so no point passing a reference.
@@ -560,6 +576,7 @@ public:
                                       const nanobind::DRef<Eigen::MatrixXd> &targets_nb) noexcept {
 #pragma omp parallel for schedule(dynamic) default(none) shared(data_nb, targets_nb, weight_pairs, layers)
         for (int x = 0; x < weight_pairs.size(); x++) {
+            
             if (x == 0) {
                 update_weights_parallel(data_nb, weight_pairs[x], targets_nb, true);
             } else {
@@ -649,9 +666,11 @@ private:
 
 
     //Used to calc dL_dc
-    Eigen::MatrixXd dL_dout;
-    Eigen::MatrixXd dL_dc;
-    Eigen::MatrixXd inputs;
+    //std::vector<std::tuple<Eigen::MatrixXd, Eigen::MatrixXd>> codes_dL_douts;
+    std::vector<Eigen::MatrixXd> codes_dL_douts_one;
+    std::vector<Eigen::MatrixXd> codes_dL_douts_two;
+    int dL_dc_index;
+
 
     //Model hyperparams
     size_t n_iter_codes;
@@ -678,11 +697,14 @@ NB_MODULE(fast_altmin, m) {
     m.def("hello_world", &hello_world);
     m.def("hello_world_in", &hello_world_in);
     m.def("hello_world_out", &hello_world_out);
-    m.def("lin", &lin);
+    m.def("lin", &lin, nanobind::arg("input").noconvert(), nanobind::arg("weight").noconvert(), nanobind::arg("bias").noconvert());
+    m.def("lin_no_transpose", &lin_no_transpose, nanobind::arg("input").noconvert(), nanobind::arg("weight").noconvert(), nanobind::arg("bias").noconvert());
+    m.def("matrix_mul", &matrix_mul);
+    m.def("matrix_mul_two", &matrix_mul_two);
+    // m.def("lin_three", &lin_three);
+    // m.def("lin_four", &lin_four);
     m.def("ReLU", &ReLU);
     m.def("sigmoid", &sigmoid);
-    m.def("ReLU_inplace", &ReLU_inplace);
-    m.def("sigmoid_inplace", &sigmoid_inplace);
     m.def("matrix_in", &matrix_in);
     m.def("matrix_out", &matrix_out);
     m.def("matrix_multiplication", &matrix_multiplication);
