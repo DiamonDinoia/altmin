@@ -21,9 +21,6 @@ def test_lin_time():
         for i in range(5000):
             input = torch.rand(n,m)
             weight = torch.rand(a,b)
-            print(input.shape)
-            print(weight.shape)
-            break
             res = torch.matmul(input,weight)
 
         end = time.time()
