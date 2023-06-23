@@ -47,17 +47,17 @@ def initialise_weights_and_biases(model_python, neural_network):
     neural_network.set_weights_and_biases(weights,biases)
 
 
-# class TestLayers(unittest.TestCase):
-#     def test_lin(self):
-#         lin = nn.Linear(2, 4).double()
-#         in_tensor = torch.rand(1, 2, dtype=torch.double)
-#         weight = lin.weight.data
-#         bias = lin.bias.data
-#         #bias = torch.reshape(lin.bias.data, (len(lin.bias.data), 1))
-#         cpp_imp = torch.from_numpy(fast_altmin.lin(in_tensor,
-#                                       weight, bias))
-#         python_imp = lin(in_tensor)
-#         check_equal(cpp_imp, python_imp, 10e8)
+class TestLayers(unittest.TestCase):
+    def test_lin(self):
+        lin = nn.Linear(2, 4).double()
+        in_tensor = torch.rand(1, 2, dtype=torch.double)
+        weight = lin.weight.data.transpose(1,0)
+        bias = lin.bias.data
+        #bias = torch.reshape(lin.bias.data, (len(lin.bias.data), 1))
+        cpp_imp = torch.from_numpy(fast_altmin.lin_no_transpose(in_tensor,
+                                      weight, bias))
+        python_imp = lin(in_tensor)
+        check_equal(cpp_imp, python_imp, 10e8)
 
 #     def test_lin_batch(self):
 #         lin = nn.Linear(4, 6).double()

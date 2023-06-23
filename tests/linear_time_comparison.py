@@ -60,32 +60,35 @@ def test_linear(batch_size, n_iter, epochs):
         
 
         model = nn.Linear(5,25).double()
+        weight = model.weight.data
         weight_transpose = model.weight.data.transpose(1,0).numpy()
         bias = model.bias.data.numpy()
         for epoch in range(epochs):
             for input in inputs_one_cpp:
                 start = time.time()
-                fast_altmin.lin_no_transpose(input, weight_transpose, bias)
+                fast_altmin.lin(input, weight, bias)
                 end = time.time()
                 time_cpp += (end-start)
 
         model = nn.Linear(25,30).double()
+        weight = model.weight.data
         weight_transpose = model.weight.data.transpose(1,0).numpy()
         bias = model.bias.data.numpy()
         for epoch in range(epochs):
             for input in inputs_two_cpp:
                 start = time.time()
-                fast_altmin.lin_no_transpose(input, weight_transpose, bias)
+                fast_altmin.lin(input, weight, bias)
                 end = time.time()
                 time_cpp += (end-start)
 
         model = nn.Linear(30,1).double()
+        weight = model.weight.data
         weight_transpose = model.weight.data.transpose(1,0).numpy()
         bias = model.bias.data.numpy()
         for epoch in range(epochs):
             for input in inputs_three_cpp:
                 start = time.time()
-                fast_altmin.lin_no_transpose(input, weight_transpose, bias)
+                fast_altmin.lin(input, weight, bias)
                 end = time.time()
                 time_cpp += (end-start)
 
@@ -116,6 +119,6 @@ def main():
         print("\nTime for python with batch size "+str(batch_sizes[x]) +": " + str(python_times[x]))
         print("Time for cpp with batch size "+str(batch_sizes[x]) +": " + str(cpp_times[x]))
 
-    plot_two_grouped_bar(python_times, cpp_times, range(len(batch_sizes)) , "Show performance of linear layer in cpp and python", ["python", "cpp"], "batch_size", "time", "problem.png")
+    plot_two_grouped_bar(python_times, cpp_times, batch_sizes , "Show performance of linear layer in cpp and python", ["python", "cpp"], "batch_size", "time", "problem.png")
 
 main()

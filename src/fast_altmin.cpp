@@ -571,6 +571,7 @@ public:
         dL_dc_index +=1;
     }
 
+
     // //data gets changed in place and is used in multiple places so would need to be copied anyway so no point passing a reference.
     ALTMIN_INLINE void update_weights(const nanobind::DRef<Eigen::MatrixXd> &data_nb,
                                       const nanobind::DRef<Eigen::MatrixXd> &targets_nb) noexcept {
@@ -682,6 +683,8 @@ private:
     double momentum = 0.9;
     loss_function loss_fn;
     int batch_size;
+
+    Eigen::MatrixXd res;
 
 
 };

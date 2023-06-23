@@ -29,7 +29,7 @@ setup(
     install_requires = [
        'altmin@git+https://github.com/DiamonDinoia/online-alt-min'
     ]
+
     
 )
-
 

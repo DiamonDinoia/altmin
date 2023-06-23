@@ -35,15 +35,12 @@ ALTMIN_INLINE auto lin(
     return res;
 }
 
-ALTMIN_INLINE void lin_no_transpose(
+ALTMIN_INLINE auto lin_no_transpose(
         const nanobind::DRef<Eigen::MatrixXd> &input,
         const nanobind::DRef<Eigen::MatrixXd> &weight,
         const nanobind::DRef<Eigen::VectorXd> &bias) noexcept {
-    Eigen::MatrixXd res = input * weight;
-    // for (auto row : res.rowwise()){
-    //     row+=bias;
-    // }
-    //return res;
+    Eigen::MatrixXd res = (input * weight).rowwise()+bias.transpose();
+    return res;
 }
 
 ALTMIN_INLINE void matrix_mul(const nanobind::DRef<Eigen::MatrixXd> &input,
