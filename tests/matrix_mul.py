@@ -8,22 +8,25 @@ import pandas as pd
 
 def test_lin_time():
         
-        n = 5000 
-        m = 5
-        a = 5
-        b = 25
-        start =time.time()
-        fast_altmin.matrix_mul_two(m,n,a,b)
-        end = time.time()
-        print("cpp mat mul "+str(end-start))
+        for i in [1 << x for x in range(10, 14)]:
+            n = i 
+            m = i
+            a = i
+            b = i
+            input = np.random.rand(n,m)
+            weight = np.random.rand(a,b)
+            print("cpp mat mul start")
+            start =time.time()
+            res = fast_altmin.matrix_mul(input, weight)
+            end = time.time()
+            print("cpp mat mul "+str(end-start))
 
-        start=time.time()
-        for i in range(5000):
             input = torch.rand(n,m)
             weight = torch.rand(a,b)
+            print("py mat mul start")
+            start=time.time()
             res = torch.matmul(input,weight)
-
-        end = time.time()
-        print("py mat mul"+str(end-start))
+            end = time.time()
+            print("py mat mul "+str(end-start))
 
 test_lin_time()

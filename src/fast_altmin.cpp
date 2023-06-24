@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 #include <tuple>
-
+#include <thread>
 // Hello world functions used to test basic input and output for nanobind
 int hello_world() {
     std::cout << "c++: Hello World";
@@ -101,14 +101,24 @@ public:
             beta_1(0.9),
             beta_2(0.999),
             eps(1e-08),
-            step(1) {}
+            step(1) {
+        // get number of threads from thread
+
+        const auto n_threads = std::thread::hardware_concurrency();
+        std::cout << "Number of threads: " << n_threads << std::endl;
+        Eigen::setNbThreads(n_threads);
+    }
 
     // Constructor for non linear layers
     Layer(const layer_type type, const int batch_size, const int n, const double lr) :
             layer(type), has_codes(false),
             lr(lr),
             layer_output(batch_size, n),
-            dout(batch_size, n) {}
+            dout(batch_size, n) {
+        const auto n_threads = std::thread::hardware_concurrency();
+        std::cout << "Number of threads: " << n_threads << std::endl;
+        Eigen::setNbThreads(n_threads);
+    }
 
     // Low priority: Change so returns a string
     void print_info() {

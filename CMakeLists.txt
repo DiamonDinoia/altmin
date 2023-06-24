@@ -30,6 +30,11 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
+if(SKBUILD)
+    set(CMAKE_BUILD_TYPE Release)
+    message(STATUS "The project is built using scikit-build")
+endif()
+
 
 # using the highest C++ standard supported by the compiler
 # at least c++17 is required
@@ -63,7 +68,6 @@ list(APPEND FLAGS $<$<CONFIG:DEBUG>:${FLAGS_DEBUG}>
 
 function(target_add_compilation_flags target)
     set(old_flags ${FLAGS})
-    message(STATUS "COMPILATION FLAGS ${old_flags}")
     target_compile_options(${target} PUBLIC  "$<$<COMPILE_LANGUAGE:CXX>:${old_flags}>")
     if (GPU)
         if (NOT "${old_flags}" STREQUAL "")
@@ -99,6 +103,7 @@ endfunction()
 set(CPM_DOWNLOAD_VERSION 0.38.1)
 set(EIGEN_DOWNLOAD_VERSION 3.4.0)
 set(NANOBIND_DOWNLOAD_VERSION v1.1.1)
+set(OPENBLAS_DOWNLOAD_VERSION v0.3.23)
 #set(CATCH2_DOWNLOAD_VERSION v3.3.2)
 
 option(ALTMIN_BUILD_TESTS "Build tests" ON)
@@ -127,14 +132,34 @@ CPMAddPackage(
         GIT_PROGRESS YES
         EXCLUDE_FROM_ALL YES
         SYSTEM
-        DOWNLOAD_ONLY YES 
-
+        DOWNLOAD_ONLY YES
 )
 
 if(Eigen_ADDED)
   add_library(Eigen INTERFACE IMPORTED)
   target_include_directories(Eigen SYSTEM INTERFACE ${Eigen_SOURCE_DIR})
 endif()
+
+
+CPMAddPackage(
+        NAME openblas
+        GIT_REPOSITORY https://github.com/xianyi/OpenBLAS.git
+        GIT_TAG ${OPENBLAS_DOWNLOAD_VERSION}
+        GIT_SHALLOW YES
+        GIT_PROGRESS YES
+        EXCLUDE_FROM_ALL YES
+        SYSTEM
+        OPTIONS 
+            "BUILD_STATIC_LIBS ON"
+            "LAPACKE ON"
+            "USE_OPENMP ON"
+            "NO_AFFINITY OFF"
+            "BUILD_TESTING OFF"
+            "NO_WARMUP OFF"
+)
+
+target_link_libraries(Eigen INTERFACE openblas_static)
+target_compile_definitions(Eigen INTERFACE EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
 
 CPMAddPackage(
         NAME nanobind
@@ -146,8 +171,8 @@ CPMAddPackage(
         SYSTEM
 )
 
-
-nanobind_add_module(fast_altmin src/fast_altmin.cpp)
+# nanobind_add_module(fast_altmin src/fast_altmin.cpp)
+nanobind_add_module(fast_altmin src/fast_altmin.cpp NOMINSIZE NB_STATIC LTO)
 target_include_directories(fast_altmin PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(fast_altmin PRIVATE Eigen)
 
@@ -157,7 +182,10 @@ if(OpenMP_CXX_FOUND)
     message(STATUS "OpenMP found")
     list(APPEND FLAGS ${OpenMP_CXX_FLAGS})
     target_link_libraries(fast_altmin PRIVATE OpenMP::OpenMP_CXX)
+    target_link_libraries(Eigen INTERFACE OpenMP::OpenMP_CXX )
+    # target_link_libraries(openblas_static OpenMP::OpenMP_CXX)
 endif()
+
 
 target_add_compilation_flags(fast_altmin)
 

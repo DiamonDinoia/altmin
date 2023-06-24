@@ -7,6 +7,7 @@
 #include <cmath>
 #include <iostream>
 #include <vector>
+#include <thread>
 
 #define ALTMIN_INLINE inline __attribute__((always_inline))
 
@@ -28,13 +29,10 @@ ALTMIN_INLINE auto lin(
         const nanobind::DRef<Eigen::MatrixXd> &input,
         const nanobind::DRef<Eigen::MatrixXd> &weight,
         const nanobind::DRef<Eigen::VectorXd> &bias) noexcept {
-    Eigen::MatrixXd res = input * weight.transpose();
-    std::cout << res << std::endl;
-    for (auto row : res.rowwise()){
-        row+=bias;
-    }
-    std::cout << res << std::endl;
-    return res;
+//    const auto n_threads = std::thread::hardware_concurrency();
+//    std::cout << "Number of threads: " << n_threads << std::endl;
+//    Eigen::setNbThreads(n_threads);
+    return (input * weight.transpose()).rowwise() + bias.transpose();
 }
 
 ALTMIN_INLINE auto lin_no_transpose(
@@ -45,9 +43,14 @@ ALTMIN_INLINE auto lin_no_transpose(
     return res;
 }
 
-ALTMIN_INLINE void matrix_mul(const nanobind::DRef<Eigen::MatrixXd> &input,
+ALTMIN_INLINE Eigen::MatrixXd matrix_mul(const nanobind::DRef<Eigen::MatrixXd> &input,
         const nanobind::DRef<Eigen::MatrixXd> &weight){
-            Eigen::MatrixXd res = input * weight;
+            // time 
+            auto start = std::chrono::steady_clock::now();
+            return input * weight;
+            auto end = std::chrono::steady_clock::now();
+            std::chrono::duration<double> elapsed = end - start;
+            std::cout << "Time taken by function: " << elapsed.count() << " seconds" << std::endl;
         }
 
 ALTMIN_INLINE void matrix_mul_two(int n, int m, int a, int b){

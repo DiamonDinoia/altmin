@@ -107,7 +107,7 @@ def plot_two_grouped_bar(data_one, data_two, group_labels, title, legend, xlabel
     plt.show()
 
 def main():
-    batch_sizes = [1,10,100,200,500,1000,2500,5000]
+    batch_sizes = [1 << x for x in range(5, 15)]
     python_times = [0.0] * len(batch_sizes)
     cpp_times = [0.0] * len(batch_sizes)
 
