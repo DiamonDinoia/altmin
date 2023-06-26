@@ -46,6 +46,29 @@ ALTMIN_INLINE Eigen::MatrixXd pyReLU(const nanobind::DRef<Eigen::MatrixXd>& inpu
 
 ALTMIN_INLINE void pyReLU_inplace(nanobind::DRef<Eigen::MatrixXd> input) noexcept { ReLU_inplace(input); }
 
+using NeuralNetworkBCE = NeuralNetwork<loss_t::BCE>;
+
+template <typename T, typename V>
+constexpr void addNNDefs(T& nn) {
+    nn.def("emplace_relu", &V::emplace_relu);
+}
+
+template <typename T, typename V>
+constexpr void addLayerDefs(T& layer) {
+    layer.def(nanobind::init<int, int>())
+        .def_ro("n", &Layer::n)
+        .def_rw("layer_output", &Layer::layer_output)
+        .def_rw("dout", &Layer::dout);
+}
+
+template <typename T, typename V>
+constexpr void addLinearDefs(T& layer) {
+    layer.def(nanobind::init<int, int, int, Eigen::MatrixXd, Eigen::VectorXd, double>())
+        .def_rw("weights", &Linear::m_weight)
+        .def_rw("bias", &Linear::m_bias)
+        .def_rw("m_codes", &Linear::m_codes);
+}
+
 NB_MODULE(fast_altmin, m) {
     m.def("BCELoss", &BCELoss);
     m.def("MSELoss", &MSELoss);
@@ -69,44 +92,26 @@ NB_MODULE(fast_altmin, m) {
     m.def("cross_entropy_loss", &cross_entropy_loss);
     m.def("differentiate_CrossEntropyLoss", &differentiate_CrossEntropyLoss);
 
-    nanobind::class_<Layer>(m, "Layer")
-        .def(nanobind::init<int, int>())
-        .def_ro("n", &Layer::n)
-        .def_rw("layer_output", &Layer::layer_output)
-        .def_rw("dout", &Layer::dout);
+    nanobind::class_<Layer> layer(m, "Layer");
+    addLayerDefs<nanobind::class_<Layer>, Layer>(layer);
 
-    nanobind::class_<Linear>(m, "Linear")
-        .def(nanobind::init<int, int, int, Eigen::MatrixXd, Eigen::VectorXd, double>())
-        .def_rw("weights", &Linear::m_weight)
-        .def_rw("bias", &Linear::m_bias)
-        .def_rw("m_codes", &Linear::m_codes);
+    nanobind::class_<NonLinear> nonLinear(m, "NonLinear");
+    addLayerDefs<nanobind::class_<NonLinear>, NonLinear>(nonLinear);
 
-    nanobind::class_<LastLinear>(m, "LastLinear")
-        .def(nanobind::init<int, int, int, Eigen::MatrixXd, Eigen::VectorXd, double>())
-        .def_rw("weights", &LastLinear::m_weight)
-        .def_rw("bias", &LastLinear::m_bias)
-        .def_rw("m_codes", &LastLinear::m_codes);
+    nanobind::class_<Relu> relu(m, "ReLU");
+    addLayerDefs<nanobind::class_<Relu>, Relu>(relu);
 
-    nanobind::class_<NonLinear>(m, "NonLinear")
-        .def(nanobind::init<int, int>())
-        .def_ro("n", &Layer::n)
-        .def_rw("layer_output", &Layer::layer_output)
-        .def_rw("dout", &Layer::dout);
+    nanobind::class_<Sigmoid> sigmoid(m, "Sigmoid");
+    addLayerDefs<nanobind::class_<Sigmoid>, Sigmoid>(sigmoid);
 
-    nanobind::class_<Relu>(m, "ReLU")
-        .def(nanobind::init<int, int>())
-        .def_ro("n", &Layer::n)
-        .def_rw("layer_output", &Layer::layer_output)
-        .def_rw("dout", &Layer::dout);
+    nanobind::class_<Linear> linear(m, "Linear");
+    addLinearDefs<nanobind::class_<Linear>, Linear>(linear);
 
-    nanobind::class_<Sigmoid>(m, "Sigmoid")
-        .def(nanobind::init<int, int>())
-        .def_ro("n", &Layer::n)
-        .def_rw("layer_output", &Layer::layer_output)
-        .def_rw("dout", &Layer::dout);
+    nanobind::class_<LastLinear> lastLinear(m, "LastLinear");
+    addLinearDefs<nanobind::class_<LastLinear>, LastLinear>(lastLinear);
 
-    // nanobind::class_<NeuralNetwork> NeuralNetwork(m, "NeuralNetwork");
-
+    nanobind::class_<NeuralNetworkBCE> nnBCE(m, "NeuralNetworkBCE");
+    addNNDefs<nanobind::class_<NeuralNetworkBCE>, NeuralNetworkBCE>(nnBCE);
     // NeuralNetwork.def(nanobind::init<NeuralNetwork::loss_function, int, int, int, int, double, double, double>())
     //     .def("push_back_lin_layer", &NeuralNetwork::push_back_lin_layer)
     //     .def("push_back_non_lin_layer", &NeuralNetwork::push_back_non_lin_layer)
