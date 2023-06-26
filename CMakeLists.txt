@@ -34,10 +34,10 @@ endif()
 # using the highest C++ standard supported by the compiler
 # at least c++17 is required
 set(ALTMIN_CXX_STANDARD DETECT CACHE STRING "Override the default CXX_STANDARD to compile with.")
-set_property(CACHE ALTMIN_CXX_STANDARD PROPERTY STRINGS DETECT 23 20 17)
+set_property(CACHE ALTMIN_CXX_STANDARD PROPERTY STRINGS DETECT 23 20)
 
 if(ALTMIN_CXX_STANDARD STREQUAL "DETECT")
-foreach(CXX_STANDARD_VAR 23;20;17)
+foreach(CXX_STANDARD_VAR 23;20)
   if("cxx_std_${CXX_STANDARD_VAR}" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
       message(STATUS "Detected support for C++${CXX_STANDARD_VAR} standard")
       set(ALTMIN_CXX_STANDARD ${CXX_STANDARD_VAR})
