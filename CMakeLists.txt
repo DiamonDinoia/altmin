@@ -3,15 +3,15 @@
 #-----------------------------------------------------------------------
 # - Enforce an out-of-source builds before anything else
 #
-if(${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_BINARY_DIR})
-  message(STATUS "AltMin requires an out-of-source build.")
-  message(STATUS "Please remove these files from ${CMAKE_CURRENT_BINARY_DIR} first:")
-  message(STATUS "CMakeCache.txt")
-  message(STATUS "CMakeFiles")
-  message(STATUS "Once these files are removed, create a separate directory")
-  message(STATUS "and run CMake from there")
-  message(FATAL_ERROR "in-source build detected")
-endif()
+if (${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_BINARY_DIR})
+    message(STATUS "AltMin requires an out-of-source build.")
+    message(STATUS "Please remove these files from ${CMAKE_CURRENT_BINARY_DIR} first:")
+    message(STATUS "CMakeCache.txt")
+    message(STATUS "CMakeFiles")
+    message(STATUS "Once these files are removed, create a separate directory")
+    message(STATUS "and run CMake from there")
+    message(FATAL_ERROR "in-source build detected")
+endif ()
 
 option(ALTMIN_ENABLE_LTO "Enables link time optimisation" ON)
 
@@ -25,15 +25,27 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 set(DCMAKE_RULE_MESSAGES OFF)
 
 
-if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
-  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
-endif()
+# version of the libraries to be used
+set(CPM_DOWNLOAD_VERSION 0.38.1)
+set(EIGEN_DOWNLOAD_VERSION 3.4.0)
+set(NANOBIND_DOWNLOAD_VERSION v1.1.1)
+set(OPENBLAS_DOWNLOAD_VERSION v0.3.23)
 
-if(SKBUILD)
+#set(CATCH2_DOWNLOAD_VERSION v3.3.2)
+
+option(ALTMIN_BUILD_TESTS "Build tests" ON)
+option(ALTMIN_ENABLE_OPENBLAS "Enable OpenBLAS backend for Eigen" OFF)
+
+
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif ()
+
+if (SKBUILD)
     set(CMAKE_BUILD_TYPE Release)
     message(STATUS "The project is built using scikit-build")
-endif()
+endif ()
 
 
 # using the highest C++ standard supported by the compiler
@@ -41,21 +53,20 @@ endif()
 set(ALTMIN_CXX_STANDARD DETECT CACHE STRING "Override the default CXX_STANDARD to compile with.")
 set_property(CACHE ALTMIN_CXX_STANDARD PROPERTY STRINGS DETECT 23 20 17)
 
-if(ALTMIN_CXX_STANDARD STREQUAL "DETECT")
-foreach(CXX_STANDARD_VAR 23;20;17)
-  if("cxx_std_${CXX_STANDARD_VAR}" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-      message(STATUS "Detected support for C++${CXX_STANDARD_VAR} standard")
-      set(ALTMIN_CXX_STANDARD ${CXX_STANDARD_VAR})
-      break()
-  endif()
-endforeach()
-endif()
+if (ALTMIN_CXX_STANDARD STREQUAL "DETECT")
+    foreach (CXX_STANDARD_VAR 23;20;17)
+        if ("cxx_std_${CXX_STANDARD_VAR}" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+            message(STATUS "Detected support for C++${CXX_STANDARD_VAR} standard")
+            set(ALTMIN_CXX_STANDARD ${CXX_STANDARD_VAR})
+            break()
+        endif ()
+    endforeach ()
+endif ()
 
 set(FLAGS_DEBUG -O0 -fstack-protector-all -Wall -Wextra -pedantic -fno-inline)
 set(FLAGS_RELEASE -O3 -ffp-contract=fast -freciprocal-math
         -fmerge-all-constants -fno-math-errno -march=native -funroll-loops
-        -ftree-vectorize -fno-trapping-math -fassociative-math -ffinite-math-only
-        -fno-signed-zeros)
+        -ftree-vectorize -fno-trapping-math -fassociative-math -ffinite-math-only)
 set(FLAGS_RelWithDebInfo ${FLAGS_RELEASE} -g -fno-omit-frame-pointer)
 
 if (NOT (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
@@ -68,7 +79,9 @@ list(APPEND FLAGS $<$<CONFIG:DEBUG>:${FLAGS_DEBUG}>
 
 function(target_add_compilation_flags target)
     set(old_flags ${FLAGS})
-    target_compile_options(${target} PUBLIC  "$<$<COMPILE_LANGUAGE:CXX>:${old_flags}>")
+    target_compile_options(${target} PUBLIC "$<$<COMPILE_LANGUAGE:CXX>:${old_flags}>")
+    target_compile_options(${target} PUBLIC "$<$<COMPILE_LANGUAGE:C>:${old_flags}>")
+    target_compile_options(${target} PUBLIC "$<$<COMPILE_LANGUAGE:Fortran>:${old_flags}>")
     if (GPU)
         if (NOT "${old_flags}" STREQUAL "")
             string(REPLACE ";" "," CUDA_flags "${old_flags}")
@@ -99,15 +112,6 @@ function(enable_lto target)
 endfunction()
 
 
-# version of the libraries to be used
-set(CPM_DOWNLOAD_VERSION 0.38.1)
-set(EIGEN_DOWNLOAD_VERSION 3.4.0)
-set(NANOBIND_DOWNLOAD_VERSION v1.1.1)
-set(OPENBLAS_DOWNLOAD_VERSION v0.3.23)
-#set(CATCH2_DOWNLOAD_VERSION v3.3.2)
-
-option(ALTMIN_BUILD_TESTS "Build tests" ON)
-
 if (CPM_SOURCE_CACHE)
     set(CPM_DOWNLOAD_LOCATION "${CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
 elseif (DEFINED ENV{CPM_SOURCE_CACHE})
@@ -135,31 +139,31 @@ CPMAddPackage(
         DOWNLOAD_ONLY YES
 )
 
-if(Eigen_ADDED)
-  add_library(Eigen INTERFACE IMPORTED)
-  target_include_directories(Eigen SYSTEM INTERFACE ${Eigen_SOURCE_DIR})
-endif()
+if (Eigen_ADDED)
+    add_library(Eigen INTERFACE IMPORTED)
+    target_include_directories(Eigen SYSTEM INTERFACE ${Eigen_SOURCE_DIR})
+endif ()
 
-
-CPMAddPackage(
-        NAME openblas
-        GIT_REPOSITORY https://github.com/xianyi/OpenBLAS.git
-        GIT_TAG ${OPENBLAS_DOWNLOAD_VERSION}
-        GIT_SHALLOW YES
-        GIT_PROGRESS YES
-        EXCLUDE_FROM_ALL YES
-        SYSTEM
-        OPTIONS 
+if (ALTMIN_ENABLE_OPENBLAS)
+    CPMAddPackage(
+            NAME openblas
+            GIT_REPOSITORY https://github.com/xianyi/OpenBLAS.git
+            GIT_TAG ${OPENBLAS_DOWNLOAD_VERSION}
+            GIT_SHALLOW YES
+            GIT_PROGRESS YES
+            EXCLUDE_FROM_ALL YES
+            SYSTEM
+            OPTIONS
             "BUILD_STATIC_LIBS ON"
             "LAPACKE ON"
             "USE_OPENMP ON"
             "NO_AFFINITY OFF"
             "BUILD_TESTING OFF"
             "NO_WARMUP OFF"
-)
-
-target_link_libraries(Eigen INTERFACE openblas_static)
-target_compile_definitions(Eigen INTERFACE EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
+    )
+    target_link_libraries(Eigen INTERFACE openblas_static)
+    target_compile_definitions(Eigen INTERFACE EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
+endif ()
 
 CPMAddPackage(
         NAME nanobind
@@ -171,30 +175,28 @@ CPMAddPackage(
         SYSTEM
 )
 
-# nanobind_add_module(fast_altmin src/fast_altmin.cpp)
 nanobind_add_module(fast_altmin src/fast_altmin.cpp NOMINSIZE NB_STATIC LTO)
 target_include_directories(fast_altmin PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(fast_altmin PRIVATE Eigen)
 
 find_package(OpenMP)
 
-if(OpenMP_CXX_FOUND)
-    message(STATUS "OpenMP found")
-    list(APPEND FLAGS ${OpenMP_CXX_FLAGS})
-    target_link_libraries(fast_altmin PRIVATE OpenMP::OpenMP_CXX)
-    target_link_libraries(Eigen INTERFACE OpenMP::OpenMP_CXX )
-    # target_link_libraries(openblas_static OpenMP::OpenMP_CXX)
-endif()
+if (OpenMP_CXX_FOUND)
+message(STATUS "OpenMP found")
+list(APPEND FLAGS ${OpenMP_CXX_FLAGS})
+target_link_libraries(fast_altmin PRIVATE OpenMP::OpenMP_CXX)
+target_link_libraries(Eigen INTERFACE OpenMP::OpenMP_CXX)
+endif ()
 
 
 target_add_compilation_flags(fast_altmin)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    enable_lto(fast_altmin)
-endif()
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+enable_lto(fast_altmin)
+endif ()
 
 install(TARGETS fast_altmin LIBRARY DESTINATION .)
 
-if(ALTMIN_BUILD_TESTS)
-    add_subdirectory(tests)
-endif()
+if (ALTMIN_BUILD_TESTS)
+add_subdirectory(tests)
+endif ()
