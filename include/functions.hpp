@@ -37,15 +37,16 @@ ALTMIN_INLINE auto lin(const Eigen::MatrixXd& input,
 // but again I'll come back to this
 // Also note the reference to the data is passed and the data is changed in
 // place so nothing returned
-ALTMIN_INLINE void ReLU_inplace(auto& input) noexcept {
+template <typename T>
+ALTMIN_INLINE void ReLU_inplace(T& input) noexcept {
     const auto N = input.rows();
     const auto M = input.cols();
     for (auto i = 0L; i < N; ++i) {
         for (auto j = 0L; j < M; ++j) { input(i, j) = std::max(input(i, j), 0.0); }
     }
 }
-
-ALTMIN_INLINE auto ReLU(const auto& input) noexcept {
+template <typename T>
+ALTMIN_INLINE auto ReLU(const T& input) noexcept {
     auto res = input;
     ReLU_inplace(res);
     return res;
