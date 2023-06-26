@@ -71,7 +71,7 @@ NB_MODULE(fast_altmin, m) {
 
     nanobind::class_<Layer>(m, "Layer")
         .def(nanobind::init<int, int>())
-        // .def_rw("n", &Layer::n)
+        .def_ro("n", &Layer::n)
         .def_rw("layer_output", &Layer::layer_output)
         .def_rw("dout", &Layer::dout);
 
@@ -89,19 +89,19 @@ NB_MODULE(fast_altmin, m) {
 
     nanobind::class_<NonLinear>(m, "NonLinear")
         .def(nanobind::init<int, int>())
-        // .def_rw("n", &Layer::n)
+        .def_ro("n", &Layer::n)
         .def_rw("layer_output", &Layer::layer_output)
         .def_rw("dout", &Layer::dout);
 
     nanobind::class_<Relu>(m, "ReLU")
         .def(nanobind::init<int, int>())
-        // .def_rw("n", &Layer::n)
+        .def_ro("n", &Layer::n)
         .def_rw("layer_output", &Layer::layer_output)
         .def_rw("dout", &Layer::dout);
 
     nanobind::class_<Sigmoid>(m, "Sigmoid")
         .def(nanobind::init<int, int>())
-        // .def_rw("n", &Layer::n)
+        .def_ro("n", &Layer::n)
         .def_rw("layer_output", &Layer::layer_output)
         .def_rw("dout", &Layer::dout);
 
