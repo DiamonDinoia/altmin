@@ -46,11 +46,22 @@ ALTMIN_INLINE Eigen::MatrixXd pyReLU(const nanobind::DRef<Eigen::MatrixXd>& inpu
 
 ALTMIN_INLINE void pyReLU_inplace(nanobind::DRef<Eigen::MatrixXd> input) noexcept { ReLU_inplace(input); }
 
-using NeuralNetworkBCE = NeuralNetwork<loss_t::BCE>;
+//     .def("get_codes", &NeuralNetwork::get_codes)
+//     .def("return_codes", &NeuralNetwork::return_codes)
+//     .def("return_weights", &NeuralNetwork::return_weights)
+//     .def("return_bias", &NeuralNetwork::return_bias)
+//     .def("set_codes", &NeuralNetwork::set_codes)
+//     .def("set_weights_and_biases", &NeuralNetwork::set_weights_and_biases)
 
 template <typename T, typename V>
 constexpr void addNNDefs(T& nn) {
-    nn.def("emplace_relu", &V::emplace_relu);
+    nn.def("emplace_relu", &V::emplace_relu)
+        .def("emplace_sigmoid", &V::emplace_sigmoid)
+        .def("emplace_linear", &V::emplace_linear)
+        .def("emplace_last_linear", &V::emplace_last_linear)
+        .def("construct_pairs", &V::construct_pairs);
+    // .def("update_codes", &V::update_codes);
+    // .def("update_weights", &V::update_weights);
 }
 
 template <typename T, typename V>
@@ -110,8 +121,21 @@ NB_MODULE(fast_altmin, m) {
     nanobind::class_<LastLinear> lastLinear(m, "LastLinear");
     addLinearDefs<nanobind::class_<LastLinear>, LastLinear>(lastLinear);
 
-    nanobind::class_<NeuralNetworkBCE> nnBCE(m, "NeuralNetworkBCE");
-    addNNDefs<nanobind::class_<NeuralNetworkBCE>, NeuralNetworkBCE>(nnBCE);
+    nanobind::enum_<loss_t>(m, "loss_function")
+        .value("BCELoss", loss_t::BCE)
+        .value("MSELoss", loss_t::MSE)
+        .value("CrossEntropyLoss", loss_t::CrossEntropy)
+        .export_values();
+
+    nanobind::class_<NeuralNetwork<loss_t::BCE>> nnBCE(m, "NeuralNetworkBCE");
+    addNNDefs<nanobind::class_<NeuralNetwork<loss_t::BCE>>, NeuralNetwork<loss_t::BCE>>(nnBCE);
+
+     nanobind::class_<NeuralNetwork<loss_t::MSE>> nnMSE(m, "NeuralNetworkMSE");
+     addNNDefs<nanobind::class_<NeuralNetwork<loss_t::MSE>>, NeuralNetwork<loss_t::MSE>>(nnMSE);
+
+     nanobind::class_<NeuralNetwork<loss_t::CrossEntropy>> nnCrossEntropy(m, "NeuralNetworkCrossEntropy");
+     addNNDefs<nanobind::class_<NeuralNetwork<loss_t::CrossEntropy>>, NeuralNetwork<loss_t::CrossEntropy>>(
+         nnCrossEntropy);
     // NeuralNetwork.def(nanobind::init<NeuralNetwork::loss_function, int, int, int, int, double, double, double>())
     //     .def("push_back_lin_layer", &NeuralNetwork::push_back_lin_layer)
     //     .def("push_back_non_lin_layer", &NeuralNetwork::push_back_non_lin_layer)
