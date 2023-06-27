@@ -41,12 +41,9 @@ class Adam {
           bias_m_t_correct(Eigen::VectorXd::Zero(bias.rows())),
           bias_v_t_correct(Eigen::VectorXd::Zero(bias.rows())) {}
 
-   private:
-    // See https://pytorch.org/docs/stable/generated/torch.optim.Adam.html for
-    // implementation details
     template <bool init_vals>
-    ALTMIN_INLINE void adam(const nanobind::DRef<Eigen::MatrixXd>& grad_weight,
-                            const nanobind::DRef<Eigen::VectorXd>& grad_bias) noexcept {
+    ALTMIN_INLINE void adam(const auto& grad_weight,
+                            const auto& grad_bias) noexcept {
         // Update weight
         if constexpr (init_vals) {
             weight_m = (1 - beta_1) * grad_weight;
@@ -77,6 +74,10 @@ class Adam {
 
         step = step + 1;
     }
+   private:
+    // See https://pytorch.org/docs/stable/generated/torch.optim.Adam.html for
+    // implementation details
+
 
     Eigen::MatrixXd& weight;
     Eigen::VectorXd& bias;
@@ -116,7 +117,7 @@ struct Linear : public Layer {
           m_weight(std::move(weight)),
           m_bias(std::move(bias)),
           m_codes(n, batchSize),
-          adam(m_weight, m_bias, learning_rate) {}
+          m_adam(m_weight, m_bias, learning_rate) {}
 
     ALTMIN_INLINE void forward(const nanobind::DRef<Eigen::MatrixXd>& inputs, const bool store_codes) noexcept {
         layer_output = lin(inputs, m_weight, m_bias);
@@ -131,9 +132,13 @@ struct Linear : public Layer {
             dout = inputs;
         }
     }
-
+    template <bool init_vals>
+    void adam(const auto& grad_weight,
+              const auto& grad_bias) noexcept {
+        m_adam.adam<init_vals>(grad_weight, grad_bias);
+    }
    private:
-    Adam adam;
+    Adam m_adam;
 };
 
 // last linear layer does not have codes

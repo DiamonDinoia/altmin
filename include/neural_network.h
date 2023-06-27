@@ -61,16 +61,9 @@ class NeuralNetwork {
 
     ALTMIN_INLINE int get_idx_next_layer_with_codes(int idx) noexcept {
         auto index = 0;
-        std::visit(
-            [&index](auto&& arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, Linear>) {
-                    return index;
-                } else {
-                    index += 1;
-                }
-            },
-            layers);
+        for (int i = idx; i < layers.size(); ++i) {
+            if (std::holds_alternative<Linear>(layers[i])) { return index; }
+        }
         return static_cast<int>(layers.size() - 1);
     }
 
@@ -79,13 +72,12 @@ class NeuralNetwork {
                                       const int end_idx,
                                       const int derivative_idx) {
         weight_pairs.emplace_back(start_idx, layer_idx, end_idx, derivative_idx);
-        auto getWeight = [](auto&& arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, Linear> || std::is_same_v<T, LastLinear>) {
-                return std::get<T>(arg).m_weight;
-            }
+        auto getWeight = [this, layer_idx]() {
+            auto& arg = layers[layer_idx];
+            if (std::holds_alternative<Linear>(arg)) { return std::get<Linear>(arg).m_weight; }
+            return std::get<LastLinear>(arg).m_weight;
         };
-        const auto& weight = getWeight(layers[layer_idx]);
+        const auto& weight = getWeight();
         weight_dL_douts.emplace_back(batch_size, weight.rows());
         dL_dWs.emplace_back(weight.rows(), weight.cols());
         dL_dbs.emplace_back(weight.rows(), 1);
@@ -98,7 +90,8 @@ class NeuralNetwork {
         int end_idx;
         int start_idx      = 0;
         int derivative_idx = 0;
-        for (auto& [last, idx] = std::make_tuple(false, 0); idx < layers.size() && !last; idx++) {
+        auto last          = false;
+        for (auto idx = 0; idx < layers.size() && !last; idx++) {
             std::visit(
                 [&idx, &last, &start_idx, &end_idx, &derivative_idx, this](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
@@ -127,17 +120,15 @@ class NeuralNetwork {
                                                   const int idx,
                                                   const int end_idx) noexcept {
         auto applyForward = [&idx, &end_idx](auto&& arg, auto&& inputs) {
-            using T = std::decay_t<decltype(arg)>;
-            std::get<T>(arg).forward(inputs, false);
-        };
-
-        auto getLayerOutput = [&idx, &end_idx](auto&& arg) -> auto& {
-            return std::get<std::decay_t<decltype(arg)>>(arg).layer_output;
+            if (std::holds_alternative<Linear>(arg)) { std::get<Linear>(arg).forward(inputs, false); }
+            if (std::holds_alternative<Relu>(arg)) { std::get<Relu>(arg).forward(inputs); }
+            if (std::holds_alternative<Sigmoid>(arg)) { std::get<Sigmoid>(arg).forward(inputs); }
+            if (std::holds_alternative<LastLinear>(arg)) { std::get<LastLinear>(arg).forward(inputs, false); }
         };
 
         if (idx < end_idx) { applyForward(layers[idx], inputs); }
-        if (idx + 1 < end_idx) { applyForward(layers[idx + 1], getLayerOutput(layers[idx])); }
-        if (idx + 2 < end_idx) { applyForward(layers[idx + 2], getLayerOutput(layers[idx + 1])); }
+        if (idx + 1 < end_idx) { applyForward(layers[idx + 1], getLayer(idx).layer_output); }
+        if (idx + 2 < end_idx) { applyForward(layers[idx + 2], getLayer(idx + 1).layer_output); }
     }
 
     // Apply the chain rule to calculate dw, db or dc depending on bool
@@ -190,8 +181,14 @@ class NeuralNetwork {
                                            const int end_idx,
                                            const int derivative_idx) noexcept {
         auto apply_differentiate = [](auto&& arg, auto& inputs, auto code_derivative) {
-            using T = std::decay_t<decltype(arg)>;
-            std::get<T>(arg).differentiate_layer(inputs, code_derivative);
+            if (std::holds_alternative<Linear>(arg)) {
+                std::get<Linear>(arg).differentiate_layer(inputs, code_derivative);
+            }
+            if (std::holds_alternative<Relu>(arg)) { std::get<Relu>(arg).differentiate_layer(inputs); }
+            if (std::holds_alternative<Sigmoid>(arg)) { std::get<Sigmoid>(arg).differentiate_layer(inputs); }
+            if (std::holds_alternative<LastLinear>(arg)) {
+                std::get<LastLinear>(arg).differentiate_layer(inputs, code_derivative);
+            }
         };
 
         auto getLayerOutput = [](auto&& arg, auto& inputs, auto code_derivative) -> auto& {
@@ -206,12 +203,12 @@ class NeuralNetwork {
 
         if (start_idx == end_idx) {
             apply_differentiate(layers[end_idx], inputs, code_derivative);
-            dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * getDout(layers[start_idx]);
+            dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * getLinear(start_idx).dout;
             dL_dbs[derivative_idx] = weight_dL_douts[derivative_idx].colwise().sum();
             return;
         } else {
             calc_matrix_for_derivative(inputs, start_idx + 1, end_idx);
-            differentiate_layer(layers[end_idx], getLayerOutput(layers[end_idx - 1]), code_derivative);
+            apply_differentiate(layers[end_idx], getLayer(end_idx - 1).layer_output, code_derivative);
         }
 
         if (end_idx - 1 > start_idx) {
@@ -219,7 +216,7 @@ class NeuralNetwork {
                 apply_differentiate(layers[end_idx - 1], inputs, code_derivative);
             } else {
                 calc_matrix_for_derivative(inputs, start_idx + 1, end_idx - 1);
-                differentiate_layer(layers[end_idx - 1], getLayerOutput(layers[end_idx - 2]), code_derivative);
+                apply_differentiate(layers[end_idx - 1], getLayer(end_idx - 2).layer_output, code_derivative);
             }
         }
 
@@ -228,7 +225,7 @@ class NeuralNetwork {
                 apply_differentiate(layers[end_idx - 2], inputs, code_derivative);
             } else {
                 calc_matrix_for_derivative(inputs, start_idx + 1, end_idx - 2);
-                differentiate_layer(layers[end_idx - 2], getLayerOutput(layers[end_idx - 3]), code_derivative);
+                apply_differentiate(layers[end_idx - 2], getLayer(end_idx-3).layer_output, code_derivative);
             }
         }
 
@@ -249,29 +246,29 @@ class NeuralNetwork {
 
         for (auto [start_idx, end_idx] : code_pairs) {
             for (size_t it = 0; it < n_iter_codes; it++) {
-                inputs = getLayer(start_idx).codes;
+                inputs = getLinear(start_idx).m_codes;
                 calc_matrix_for_derivative(inputs, start_idx + 1, end_idx + 1);
                 if (!last_layer) {
                     dL_dout =
-                        differentiate_MSELoss(getLayer(idx_last_code).layer_output, getLayer(idx_last_code).codes);
+                        differentiate_MSELoss(getLinear(idx_last_code).layer_output, getLinear(idx_last_code).m_codes);
 
                 } else {
                     if constexpr (Loss == loss_t::BCE) {
-                        dL_dout = (1.0 / mu) * differentiate_BCELoss(getLayer(end_idx).layer_output, targets);
+                        dL_dout = (1.0 / mu) * differentiate_BCELoss(getLinear(end_idx).layer_output, targets);
                     }
                     if constexpr (Loss == loss_t::MSE) {
-                        dL_dout = (1.0 / mu) * differentiate_MSELoss(getLayer(end_idx).layer_output, targets);
+                        dL_dout = (1.0 / mu) * differentiate_MSELoss(getLinear(end_idx).layer_output, targets);
                     }
                     if constexpr (Loss == loss_t::CrossEntropy) {
                         dL_dout = (1.0 / mu) * differentiate_CrossEntropyLoss(
-                                                   getLayer(end_idx).layer_output, class_labels,
-                                                   static_cast<int>(getLayer(end_idx).layer_output.cols()));
+                                                   getLinear(end_idx).layer_output, class_labels,
+                                                   static_cast<int>(getLinear(end_idx).layer_output.cols()));
                     }
                 }
                 last_layer = false;
-                calculate_gradients(layers[start_idx].codes, true, start_idx, end_idx, -1);
-                getLayer(start_idx).codes = getLayer(start_idx).codes - (((1.0 + momentum) * lr_codes) * dL_dc);
-                idx_last_code             = start_idx;
+                calculate_gradients(getLinear(start_idx).m_codes, true, start_idx, end_idx, -1);
+                getLinear(start_idx).m_codes = getLinear(start_idx).m_codes - (((1.0 + momentum) * lr_codes) * dL_dc);
+                idx_last_code                = start_idx;
             }
         }
     }
@@ -285,7 +282,7 @@ class NeuralNetwork {
             if (x == 0) {
                 update_weights_parallel(data_nb, weight_pairs[x], targets_nb, true);
             } else {
-                update_weights_parallel(getLayer(std::get<0>(weight_pairs[x])).codes, weight_pairs[x], targets_nb,
+                update_weights_parallel(getLinear(std::get<0>(weight_pairs[x])).m_codes, weight_pairs[x], targets_nb,
                                         false);
             }
         }
@@ -309,28 +306,28 @@ class NeuralNetwork {
                 calc_matrix_for_derivative(inputs, start_idx_parallel, end_idx_parallel + 1);
 
                 weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(
-                    getLayer(layer_idx_parallel).layer_output, getLayer(layer_idx_parallel).codes);
+                    getLinear(layer_idx_parallel).layer_output, getLinear(layer_idx_parallel).m_codes);
             } else {
                 calc_matrix_for_derivative(inputs, start_idx_parallel + 1, end_idx_parallel + 1);
 
                 if (end_idx_parallel == (layers.size() - 1)) {
                     if constexpr (Loss == loss_t::BCE) {
                         weight_dL_douts[derivative_idx_parallel] =
-                            differentiate_BCELoss(getLayer(end_idx_parallel).layer_output, targets);
+                            differentiate_BCELoss(getLinear(end_idx_parallel).layer_output, targets);
                     }
                     if constexpr (Loss == loss_t::MSE) {
                         weight_dL_douts[derivative_idx_parallel] =
-                            differentiate_MSELoss(getLayer(end_idx_parallel).layer_output, targets);
+                            differentiate_MSELoss(getLinear(end_idx_parallel).layer_output, targets);
                     }
                     if constexpr (Loss == loss_t::CrossEntropy) {
                         weight_dL_douts[derivative_idx_parallel] = differentiate_CrossEntropyLoss(
-                            getLayer(end_idx_parallel).layer_output, class_labels,
-                            static_cast<int>(getLayer(end_idx_parallel).layer_output.cols()));
+                            getLinear(end_idx_parallel).layer_output, class_labels,
+                            static_cast<int>(getLinear(end_idx_parallel).layer_output.cols()));
                     }
 
                 } else {
                     weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(
-                        getLayer(end_idx_parallel).layer_output, getLayer(end_idx_parallel).codes);
+                        getLinear(end_idx_parallel).layer_output, getLinear(end_idx_parallel).m_codes);
                 }
             }
 
@@ -339,7 +336,7 @@ class NeuralNetwork {
 
             calculate_gradients(inputs, false, start_idx_parallel, end_idx_parallel, derivative_idx_parallel);
 
-            getLayer(layer_idx_parallel).adam(dL_dWs[derivative_idx_parallel], dL_dbs[derivative_idx_parallel]);
+            getLinear(layer_idx_parallel).template adam<false>(dL_dWs[derivative_idx_parallel], dL_dbs[derivative_idx_parallel]);
         }
     }
 
@@ -374,9 +371,26 @@ class NeuralNetwork {
     int layer_idx;
     int end_idx;
 
-    ALTMIN_INLINE constexpr auto& getLayer(int idx) {
-        using T = std::decay_t<decltype(layers[0])>;
-        return std::get<T>(layers[idx]);
+    ALTMIN_INLINE constexpr Linear& getLinear(int idx) {
+        auto& arg = layers[idx];
+        if (std::holds_alternative<Linear>(arg)) { return std::get<Linear>(arg); }
+        if (std::holds_alternative<Relu>(arg)) {
+            throw std::runtime_error("Relu layer not supported");
+            return reinterpret_cast<Linear&>(std::get<Relu>(arg));
+        }
+        if (std::holds_alternative<Sigmoid>(arg)) {
+            throw std::runtime_error("Relu layer not supported");
+            return reinterpret_cast<Linear&>(std::get<Sigmoid>(arg));
+        }
+        if (std::holds_alternative<LastLinear>(arg)) { return std::get<LastLinear>(arg); }
+    }
+
+    ALTMIN_INLINE constexpr Layer& getLayer(int idx) {
+        auto& arg = layers[idx];
+        if (std::holds_alternative<Linear>(arg)) { return std::get<Linear>(arg); }
+        if (std::holds_alternative<Relu>(arg)) { return std::get<Relu>(arg); }
+        if (std::holds_alternative<Sigmoid>(arg)) { return std::get<Sigmoid>(arg); }
+        if (std::holds_alternative<LastLinear>(arg)) { return std::get<LastLinear>(arg); }
     }
 };
 
