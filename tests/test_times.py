@@ -14,29 +14,34 @@ from log_approximator import *
 
 def sgd_forward(model, X, Y, epochs):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    time_sgd_foward = 0.0
+    time_sgd_forward = 0.0
     time_sgd_backwards = 0.0
+    time_prep = 0.0
     
     for epoch in range(epochs):
         for index in range(0,99):
+            start = time.time()
             data = torch.tensor(np.array(X[index])).double()
             targets = torch.tensor(np.array(Y[index])).double()
             targets.reshape(1,1)
-            optimizer.zero_grad()
+            end = time.time()
+            time_prep += (end-start)
             start = time.time()    
             output = model(data)
             end = time.time()
-            time_sgd_foward += (end-start)
+            time_sgd_forward += (end-start)
             start = time.time()    
             loss = nn.MSELoss()(output,targets)
             #print("loss "+str(loss))
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
             end = time.time() 
             time_sgd_backwards += (end-start)
     
-    print("time for sgd forward: "+str(time_sgd_foward))
+    print("time for sgd forward: "+str(time_sgd_forward))
     print("time for sgd backwards: "+str(time_sgd_backwards))
+    print("time for sgd prep: "+str(time_prep))
     print(" ")
 
 def altmin_forward(model, X, Y, epochs):
@@ -50,11 +55,13 @@ def altmin_forward(model, X, Y, epochs):
             targets = torch.tensor(np.array(Y[index])).double()
             targets = targets.reshape(1,1)
             data = data.reshape(1,1)
-            model.train()
-            start = time.time()    
+            
+            start = time.time()  
             with torch.no_grad():
+               
                 outputs, codes = get_codes(model, data)
             end = time.time()
+
             time_altmin_forward += (end-start)
 
             start = time.time()
@@ -67,8 +74,7 @@ def altmin_forward(model, X, Y, epochs):
             update_hidden_weights_adam_(model, data, codes, lambda_w=0, n_iter=1)
             end = time.time()
             time_altmin_weights += (end-start)
-    
-    time_altmin_forward = end - start 
+
     print("time for altmin forward: "+str(time_altmin_forward))
     print("time for altmin codes: "+str(time_altmin_codes))
     print("time for altmin weights: "+str(time_altmin_weights))
@@ -87,7 +93,7 @@ def cpp_forward(neural_network, X, Y, epochs):
             targets = torch.tensor(np.array(Y[index])).double()
             targets = targets.reshape(1,1)
             data = data.reshape(1,1)
-            start=time.time()
+            start = time.time()
             neural_network.get_codes(data, True)
             end = time.time()
             time_cpp_forward+= (end-start)
@@ -119,7 +125,8 @@ def test_log_approx():
     epochs = 100
 
     model = LogApproximator(100)
-    model = get_mods(model)
+    model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.001})
+    model[-1].optimizer.param_groups[0]['lr'] = 0.001
     model = model[1:]
     sgd_forward(model, X, Y, epochs)
 
