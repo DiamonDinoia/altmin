@@ -23,6 +23,7 @@ def check_equal_bias(first_imp, second_imp,eps):
 def check_equal_weights_and_bias(model_python, weights, biases, eps = 10e6):
     y = 0
     for x,m in enumerate(model_python):
+
         if isinstance(m, nn.Linear):
             check_equal(model_python[x].weight.data, weights[y], eps)
             check_equal_bias(model_python[x].bias, biases[y], eps)
@@ -536,12 +537,285 @@ class TestUpdateFunctions(unittest.TestCase):
         biases = neural_network.return_biases()
         check_equal_weights_and_bias(model, weights, biases, 10e9)
 
-    # def test_a(self):
+    def test_a(self):
         
-    #     in_tensor = torch.rand(2,5)
-    #     print(in_tensor)
-    #     print(in_tensor.shape)
-    #     fast_altmin.test(in_tensor)
+        fast_altmin.test_variant()
+
+    def test_forward(self):
+       
+        in_tensor = torch.rand(7,2,dtype = torch.double)
+        model = simpleNN(2, [4,3],1)
+        
+        model = get_mods(model)
+        model = model[1:]
+        neural_network = fast_altmin.VariantNeuralNetworkBCE()
+        fast_altmin.create_model_class(model, neural_network, 7, 0)
+        #neural_network.construct_pairs()
+        output_python, codes_python = get_codes(model, in_tensor)
+        output_cpp = neural_network.get_codes(in_tensor, True)
+        codes_cpp = neural_network.return_codes() 
+
+        #Check output 
+        check_equal(output_python, output_cpp, 10e6)
+        #check codes
+        for x in range(len(codes_python)):
+            check_equal(codes_python[x], codes_cpp[x], 10e6)
+
+
+    def test_update_codes_BCELoss(self):
+        in_tensor = torch.rand(7,2,dtype = torch.double)
+        targets = torch.round(torch.rand(7, 1, dtype=torch.double))
+        n_iter = 1
+        lr = 0.3
+        mu = 0.003
+        criterion = nn.BCELoss()
+
+        model = simpleNN(2, [4,3],1)
+        
+        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model = model[1:]
+
+        for it in range(4):
+            with torch.no_grad():
+                output_python, codes_python = get_codes(model, in_tensor)
+
+            codes_python = update_codes(codes_python, model, targets, criterion, mu, 0, n_iter, lr)
+
+
+        neural_network = fast_altmin.VariantNeuralNetworkBCE()
+        fast_altmin.create_model_class(model, neural_network, 7, 0)
+        
+        for it in range(4):
+            output_cpp = neural_network.get_codes(in_tensor, True)
+ 
+            neural_network.update_codes(targets)
+        codes_cpp = neural_network.return_codes() 
+
+        
+        #check codes
+        for x in range(len(codes_python)):
+            
+            check_equal(codes_python[x], codes_cpp[x], 10e6)
+
+    def test_update_codes_MSELoss(self):
+        in_tensor = torch.rand(7,1,dtype = torch.double)
+        targets = torch.round(torch.rand(7, 1, dtype=torch.double))
+        n_iter = 1
+        lr = 0.3
+        mu = 0.003
+        criterion = nn.MSELoss()
+
+        model= log_approximator.LogApproximator(5)
+        
+        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model = model[1:]
+        with torch.no_grad():
+            output_python, codes_python = get_codes(model, in_tensor)
+        for it in range(1):
+            codes_python = update_codes(codes_python, model, targets, criterion, mu, 0, n_iter, lr)
+
+
+
+        neural_network = fast_altmin.VariantNeuralNetworkMSE()
+
+        fast_altmin.create_model_class(model, neural_network, 7, 0)
+        #neural_network.construct_pairs()
+
+        output_cpp = neural_network.get_codes(in_tensor, True)
+
+
+        for it in range(1):     
+            neural_network.update_codes(targets)
+        codes_cpp = neural_network.return_codes() 
+
+        #check codes
+        for x in range(len(codes_python)):
+            
+            check_equal(codes_python[x], codes_cpp[x], 10e6)
+
+    def test_update_codes_CrossEntropyLoss(self):
+        in_tensor = torch.rand(4,10,dtype = torch.double)
+        targets = torch.randint(0, 10, (4,))
+        n_iter = 1
+        lr = 0.3
+        mu = 0.003
+        criterion = nn.CrossEntropyLoss()
+
+         # Model setup
+        model = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()        
+        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model = model[1:]
+        with torch.no_grad():
+            output_python, codes_python = get_codes(model, in_tensor)
+        for it in range(1):
+            codes_python = update_codes(codes_python, model, targets, criterion, mu, 0, n_iter, lr)
+
+
+ 
+        neural_network = fast_altmin.VariantNeuralNetworkCrossEntropy()
+
+        fast_altmin.create_model_class(model, neural_network, 4, 0)
+        #neural_network.construct_pairs()
+
+        output_cpp = neural_network.get_codes(in_tensor, True)
+
+
+        targets = targets.double()
+        targets = targets.reshape(1,len(targets))
+        for it in range(1):   
+              
+            neural_network.update_codes(targets)
+        codes_cpp = neural_network.return_codes() 
+
+        #check codes
+        for x in range(len(codes_python)):
+            
+            check_equal(codes_python[x], codes_cpp[x], 10e6)
+
+    def test_update_weights_BCELoss(self):
+        in_tensor = torch.rand(7,2,dtype = torch.double)
+        targets = torch.round(torch.rand(7, 1, dtype=torch.double))
+        n_iter = 1
+        lr = 0.3
+        mu = 0.003
+        criterion = nn.BCELoss()
+
+        model = simpleNN(2, [4,3],1)
+        
+        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model = model[1:]
+        neural_network = fast_altmin.VariantNeuralNetworkBCE()
+        fast_altmin.create_model_class(model, neural_network, 7, 0)
+        neural_network.construct_pairs()
+
+
+        for it in range(1):
+            with torch.no_grad():
+                output_python, codes_python = get_codes(model, in_tensor)
+
+            codes_python = update_codes(codes_python, model, targets, criterion, mu, 0, n_iter, lr)
+            update_hidden_weights_adam_(model, in_tensor, codes_python, lambda_w=0, n_iter=n_iter)
+            update_last_layer_(model[-1], codes_python[-1], targets, nn.BCELoss(), n_iter)
+
+        
+        
+        for it in range(1):
+            output_cpp = neural_network.get_codes(in_tensor, True)  
+            neural_network.update_codes(targets)
+            neural_network.update_weights_parallel(in_tensor, targets)
+        
+        
+        weights = neural_network.return_weights()
+        biases = neural_network.return_biases()
+
+        check_equal_weights_and_bias(model, weights, biases, 10e9)
+
+    def test_update_weights_MSELoss(self):
+        in_tensor = torch.rand(7,1,dtype = torch.double)
+        targets = torch.round(torch.rand(7, 1, dtype=torch.double))
+        n_iter = 1
+        lr = 0.3
+        mu = 0.003
+        criterion = nn.MSELoss()
+
+        model= log_approximator.LogApproximator(5)
+        
+        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model = model[1:]
+        with torch.no_grad():
+            output_python, codes_python = get_codes(model, in_tensor)
+        for it in range(1):
+            codes_python = update_codes(codes_python, model, targets, criterion, mu, 0, n_iter, lr)
+
+
+
+        neural_network = fast_altmin.VariantNeuralNetworkMSE()
+
+        fast_altmin.create_model_class(model, neural_network, 7, 0)
+        neural_network.construct_pairs()
+
+        output_cpp = neural_network.get_codes(in_tensor, True)
+
+
+        for it in range(1):     
+            neural_network.update_codes(targets)
+        codes_cpp = neural_network.return_codes() 
+
+        #Update weights
+        for it in range(1):
+            update_hidden_weights_adam_(model, in_tensor, codes_python, lambda_w=0, n_iter=n_iter)
+            update_last_layer_(model[-1], codes_python[-1], targets, nn.MSELoss(), n_iter)
+
+        for it in range(1):
+            #neural_network.update_weights_not_parallel(in_tensor, targets)
+            neural_network.update_weights_parallel(in_tensor, targets)
+        
+        
+        weights = neural_network.return_weights()
+        biases = neural_network.return_biases()
+        check_equal_weights_and_bias(model, weights, biases, 10e9)
+
+    def test_update_weights_CrossEntropyLoss(self):
+        in_tensor = torch.rand(4,10,dtype = torch.double)
+        targets = torch.randint(0, 10, (4,))
+        n_iter = 1
+        lr = 0.3
+        mu = 0.003
+        criterion = nn.CrossEntropyLoss()
+
+         # Model setup
+        model = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()        
+        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
+                     scheduler=lambda epoch: 1/2**(epoch//8))
+        model[-1].optimizer.param_groups[0]['lr'] = 0.008
+        model = model[1:]
+        with torch.no_grad():
+            output_python, codes_python = get_codes(model, in_tensor)
+        for it in range(1):
+            codes_python = update_codes(codes_python, model, targets, criterion, mu, 0, n_iter, lr)
+
+
+
+        neural_network = fast_altmin.VariantNeuralNetworkCrossEntropy()
+
+        fast_altmin.create_model_class(model, neural_network, 4, 0)
+        neural_network.construct_pairs()
+
+        output_cpp = neural_network.get_codes(in_tensor, True)
+
+        targets_cpp = targets.double()
+        targets_cpp = targets.reshape(1,len(targets))
+        for it in range(1):   
+              
+            neural_network.update_codes(targets_cpp)
+        codes_cpp = neural_network.return_codes() 
+
+        #Update weights
+        for it in range(1):
+            update_hidden_weights_adam_(model, in_tensor, codes_python, lambda_w=0, n_iter=n_iter)
+            update_last_layer_(model[-1], codes_python[-1], targets, nn.CrossEntropyLoss(), n_iter)
+
+        for it in range(1):
+            #neural_network.update_weights_not_parallel(in_tensor, targets)
+            neural_network.update_weights_parallel(in_tensor, targets_cpp)
+        
+        
+        weights = neural_network.return_weights()
+        biases = neural_network.return_biases()
+        check_equal_weights_and_bias(model, weights, biases, 10e9)
+
+
+    
 
 # class TestCNN(unittest.TestCase):
 #     def test_conv2d(self):

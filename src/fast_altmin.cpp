@@ -1,4 +1,6 @@
-#include "neural_network.h"
+//#include "neural_network.h"
+#include "variant_nn.h"
+#include "variant.h"
 
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
@@ -119,6 +121,23 @@ constexpr void addNNDefs(T& nn) {
         .def("return_biases", &V::return_biases);
 }
 
+template <typename T, typename V>
+constexpr void addVarNNDefs(T& nn) {
+    nn.def(nanobind::init<>())
+        .def("addSigmoidLayer", &V::addSigmoidLayer)
+        .def("addReluLayer", &V::addReluLayer)
+        .def("addLinearLayer", &V::addLinearLayer)
+        .def("addLastLinearLayer", &V::addLastLinearLayer)
+        .def("construct_pairs", &V::construct_pairs)
+        .def("get_codes", &V::get_codes)
+        .def("update_codes", &V::update_codes)
+        .def("update_weights_not_parallel", &V::update_weights_not_parallel)
+        .def("update_weights_parallel", &V::update_weights_parallel)
+        .def("return_codes", &V::return_codes)
+        .def("return_weights", &V::return_weights)
+        .def("return_biases", &V::return_biases);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -143,6 +162,7 @@ NB_MODULE(fast_altmin, m) {
     m.def("negative_log_likelihood", &py_negative_log_likelihood);
     m.def("cross_entropy_loss", &py_cross_entropy_loss);
     m.def("differentiate_CrossEntropyLoss", &py_differentiate_CrossEntropyLoss);
+    m.def("test_variant", &test_variant);
 
     // nanobind::class_<Layer>(m, "Layer")
     //     .def(nanobind::init<layer_type, int,int>())
@@ -178,14 +198,24 @@ NB_MODULE(fast_altmin, m) {
 
     //Marco 
     
-    nanobind::class_<NeuralNetwork<loss_t::BCE>> nnBCE(m, "NeuralNetworkBCE");
-    addNNDefs<nanobind::class_<NeuralNetwork<loss_t::BCE>>, NeuralNetwork<loss_t::BCE>>(nnBCE);
+    // nanobind::class_<NeuralNetwork<loss_t::BCE>> nnBCE(m, "NeuralNetworkBCE");
+    // addNNDefs<nanobind::class_<NeuralNetwork<loss_t::BCE>>, NeuralNetwork<loss_t::BCE>>(nnBCE);
 
-    nanobind::class_<NeuralNetwork<loss_t::MSE>> nnMSE(m, "NeuralNetworkMSE");
-    addNNDefs<nanobind::class_<NeuralNetwork<loss_t::MSE>>, NeuralNetwork<loss_t::MSE>>(nnMSE);
+    // nanobind::class_<NeuralNetwork<loss_t::MSE>> nnMSE(m, "NeuralNetworkMSE");
+    // addNNDefs<nanobind::class_<NeuralNetwork<loss_t::MSE>>, NeuralNetwork<loss_t::MSE>>(nnMSE);
 
-    nanobind::class_<NeuralNetwork<loss_t::CrossEntropy>> nnCrossEntropy(m, "NeuralNetworkCrossEntropy");
-    addNNDefs<nanobind::class_<NeuralNetwork<loss_t::CrossEntropy>>, NeuralNetwork<loss_t::CrossEntropy>>(nnCrossEntropy);
+    // nanobind::class_<NeuralNetwork<loss_t::CrossEntropy>> nnCrossEntropy(m, "NeuralNetworkCrossEntropy");
+    // addNNDefs<nanobind::class_<NeuralNetwork<loss_t::CrossEntropy>>, NeuralNetwork<loss_t::CrossEntropy>>(nnCrossEntropy);
+
+
+    nanobind::class_<VariantNeuralNetwork<loss_t::BCE>> nnBCE(m, "VariantNeuralNetworkBCE");
+    addVarNNDefs<nanobind::class_<VariantNeuralNetwork<loss_t::BCE>>, VariantNeuralNetwork<loss_t::BCE>>(nnBCE);
+
+    nanobind::class_<VariantNeuralNetwork<loss_t::MSE>> nnMSE(m, "VariantNeuralNetworkMSE");
+    addVarNNDefs<nanobind::class_<VariantNeuralNetwork<loss_t::MSE>>, VariantNeuralNetwork<loss_t::MSE>>(nnMSE);
+
+    nanobind::class_<VariantNeuralNetwork<loss_t::CrossEntropy>> nnCrossEntropy(m, "VariantNeuralNetworkCrossEntropy");
+    addVarNNDefs<nanobind::class_<VariantNeuralNetwork<loss_t::CrossEntropy>>, VariantNeuralNetwork<loss_t::CrossEntropy>>(nnCrossEntropy);
 
     // nanobind::class_<NeuralNetwork>(m, "NeuralNetwork")
     //     .def(nanobind::init<>())
