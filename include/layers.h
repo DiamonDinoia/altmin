@@ -2,30 +2,26 @@
 // Created by mbarbone on 6/26/23.
 //
 
+//
+// Edited by Tom 6/07/23
+// I kept the adam class but all the layer class are new  
+
 #ifndef FAST_ALTMIN_LAYERS_H
 #define FAST_ALTMIN_LAYERS_H
 
 #include "defines.h"
 #include "functions.hpp"
 #include "types.h"
-
-struct Layer {
-    const int n;
-    const int batch_size;
-    Eigen::MatrixXd layer_output;
-    Eigen::MatrixXd dout;
-
-    Layer(const int n, const int batch_size) : n(n), batch_size(batch_size), layer_output(batch_size, n) {}
-};
+#include <thread>
 
 class Adam {
    public:
-    Adam(Eigen::MatrixXd& weight,
-         Eigen::VectorXd& bias,
+    Adam(auto& weight,
+         auto& bias,
          const double learning_rate,
-         const float beta1 = 0.9,
-         const float beta2 = 0.999,
-         const float eps   = 1e-08)
+         float beta1 = 0.9,
+         float beta2 = 0.999,
+         float eps   = 1e-08)
         : learning_rate(learning_rate),
           weight(weight),
           bias(bias),
@@ -39,13 +35,15 @@ class Adam {
           weight_m_t_correct(Eigen::MatrixXd::Zero(weight.rows(), weight.cols())),
           weight_v_t_correct(Eigen::MatrixXd::Zero(weight.rows(), weight.cols())),
           bias_m_t_correct(Eigen::VectorXd::Zero(bias.rows())),
-          bias_v_t_correct(Eigen::VectorXd::Zero(bias.rows())) {}
+          bias_v_t_correct(Eigen::VectorXd::Zero(bias.rows())){const auto n_threads = std::thread::hardware_concurrency();
+        Eigen::setNbThreads(n_threads);}
 
-    template <bool init_vals>
+    template<bool init_vals>
     ALTMIN_INLINE void adam(const auto& grad_weight,
                             const auto& grad_bias) noexcept {
+        
         // Update weight
-        if constexpr (init_vals) {
+        if constexpr(init_vals) {
             weight_m = (1 - beta_1) * grad_weight;
             weight_v = (1 - beta_2) * (grad_weight.cwiseProduct(grad_weight));
         } else {
@@ -55,12 +53,10 @@ class Adam {
         weight_m_t_correct = weight_m / (1.0 - std::pow(beta_1, static_cast<double>(step)));
         weight_v_t_correct = weight_v / (1.0 - std::pow(beta_2, static_cast<double>(step)));
 
-        weight =
-            weight -
-            learning_rate * (weight_m_t_correct.cwiseQuotient((weight_v_t_correct.cwiseSqrt().array() + eps).matrix()));
+        weight -= learning_rate * (weight_m_t_correct.cwiseQuotient((weight_v_t_correct.cwiseSqrt().array() + eps).matrix()));
 
         // Update bias
-        if constexpr (init_vals) {
+        if constexpr(init_vals){
             bias_m = (1 - beta_1) * grad_bias;
             bias_v = (1 - beta_2) * (grad_bias.cwiseProduct(grad_bias));
         } else {
@@ -69,8 +65,7 @@ class Adam {
         }
         bias_m_t_correct = bias_m / (1.0 - std::pow(beta_1, static_cast<double>(step)));
         bias_v_t_correct = bias_v / (1.0 - std::pow(beta_2, static_cast<double>(step)));
-        bias             = bias -
-               learning_rate * (bias_m_t_correct.cwiseQuotient((bias_v_t_correct.cwiseSqrt().array() + eps).matrix()));
+        bias -= learning_rate * (bias_m_t_correct.cwiseQuotient((bias_v_t_correct.cwiseSqrt().array() + eps).matrix()));
 
         step = step + 1;
     }
@@ -89,83 +84,154 @@ class Adam {
     Eigen::MatrixXd weight_v_t_correct;
     Eigen::VectorXd bias_m_t_correct;
     Eigen::VectorXd bias_v_t_correct;
-    const double learning_rate;
-    const float beta_1;
-    const float beta_2;
-    const float eps;
+    double learning_rate;
+    float beta_1;
+    float beta_2;
+    float eps;
     int step = 1;
 };
 
-struct NonLinear : public Layer {
-    NonLinear(const int n, const int batchSize) : Layer(n, batchSize) {}
+enum layer_type {
+        RELU, LINEAR, SIGMOID, LAST_LINEAR
+    };
+
+class Layer{
+public:
+    Eigen::MatrixXd layer_output;
+    layer_type layer;
+    Eigen::MatrixXd dout;
+    int n;
+    int batch_size;
+    Layer(layer_type layer, const int n, const int batch_size) : layer(layer), n(n), batch_size(batch_size), layer_output(batch_size, n), dout(batch_size, n) {const auto n_threads = std::thread::hardware_concurrency();
+        Eigen::setNbThreads(n_threads);}
+    
+    ALTMIN_INLINE virtual void forward(const Eigen::Ref<Eigen::MatrixXd>& inputs, bool store_codes) noexcept =0;
+    ALTMIN_INLINE virtual void differentiate_layer(const Eigen::Ref<Eigen::MatrixXd>& inputs)noexcept {std::cout << "diff layer called bad " << std::endl;}
+    ALTMIN_INLINE virtual void update_codes(const Eigen::MatrixXd &dc)noexcept {}
+    ALTMIN_INLINE virtual Eigen::MatrixXd& get_codes()noexcept {std::cout << "get_codes called bad " << std::endl;}
+    ALTMIN_INLINE virtual Eigen::MatrixXd& get_weight()noexcept {std::cout << "get weights called bad " << std::endl;}
+    ALTMIN_INLINE virtual Eigen::VectorXd& get_bias()noexcept {std::cout << "get weights called bad " << std::endl;}
+    ALTMIN_INLINE virtual void set_codes(const nanobind::DRef<Eigen::MatrixXd> &codes)noexcept {};
+    ALTMIN_INLINE virtual void adam(const Eigen::Ref<Eigen::MatrixXd>& grad_weight, const Eigen::Ref<Eigen::VectorXd>& grad_bias)noexcept {std::cout << "adam called bad " << std::endl;}
+
+
 };
 
-struct Linear : public Layer {
-    const int m;
-    Eigen::MatrixXd m_weight;
-    Eigen::VectorXd m_bias;
-    Eigen::MatrixXd m_codes;
+class LinearLayer : public Layer{
+public:
 
-    Linear(const int n,
-           const int batchSize,
-           const int m,
-           Eigen::MatrixXd weight,
-           Eigen::VectorXd bias,
-           const double learning_rate)
-        : Layer(n, batchSize),
-          m(m),
-          m_weight(std::move(weight)),
-          m_bias(std::move(bias)),
-          m_codes(n, batchSize),
-          m_adam(m_weight, m_bias, learning_rate) {}
+    Eigen::MatrixXd weight;
+    Eigen::VectorXd bias;
+    Eigen::MatrixXd codes;
+    double learning_rate;
+    Adam adam_optimiser;
+    bool init_vals = true;
 
-    ALTMIN_INLINE void forward(const nanobind::DRef<Eigen::MatrixXd>& inputs, const bool store_codes) noexcept {
-        layer_output = lin(inputs, m_weight, m_bias);
-        if (store_codes) { m_codes = layer_output; }
-    }
-    ALTMIN_INLINE void differentiate_layer(const nanobind::DRef<Eigen::MatrixXd>& inputs,
-                                           bool code_derivative) noexcept {
-        if (code_derivative) {
-            dout = m_weight;
-        } else {
-            // Only need one of these
-            dout = inputs;
+    LinearLayer(const int batchSize, Eigen::MatrixXd weight, Eigen::VectorXd bias, const double learning_rate) :
+        Layer(layer_type::LINEAR, weight.rows(), batchSize), weight(weight), bias(bias), codes(batch_size,weight.cols()), learning_rate(learning_rate), 
+        adam_optimiser(this->weight, this->bias, learning_rate) {}
+
+    
+    ALTMIN_INLINE void forward(const Eigen::Ref<Eigen::MatrixXd>& inputs, bool store_codes) noexcept{
+        layer_output = lin(inputs, weight, bias);
+        if (store_codes){
+            codes = layer_output;
         }
+        
     }
-    template <bool init_vals>
-    void adam(const auto& grad_weight,
-              const auto& grad_bias) noexcept {
-        m_adam.adam<init_vals>(grad_weight, grad_bias);
+   
+
+    ALTMIN_INLINE Eigen::MatrixXd& get_codes() noexcept{
+        return codes;
     }
-   private:
-    Adam m_adam;
+
+    ALTMIN_INLINE Eigen::MatrixXd& get_weight() noexcept{
+        return weight;
+    }
+
+    ALTMIN_INLINE Eigen::VectorXd& get_bias() noexcept{
+        return bias;
+    }
+
+    ALTMIN_INLINE void update_codes(const Eigen::MatrixXd &dc) noexcept{
+        codes -= (((1.0 + 0.9) * 0.3) * dc);
+    }
+
+    ALTMIN_INLINE void set_codes(const nanobind::DRef<Eigen::MatrixXd> &codes) noexcept{
+        this->codes = codes;
+    };
+
+    ALTMIN_INLINE void adam(const Eigen::Ref<Eigen::MatrixXd>& grad_weight, const Eigen::Ref<Eigen::VectorXd>& grad_bias) noexcept {
+        if (init_vals){
+            adam_optimiser.template adam<true>(grad_weight, grad_bias);
+        }else{
+            adam_optimiser.template adam<false>(grad_weight, grad_bias);
+        }
+        init_vals=false;
+    }
+   
+
+
+
+    
 };
 
-// last linear layer does not have codes
-struct LastLinear : public Linear {
-    LastLinear(const int n,
-               const int batchSize,
-               const int m,
-               const Eigen::MatrixXd& weight,
-               const Eigen::VectorXd& bias,
-               const double learningRate)
-        : Linear(n, batchSize, m, weight, bias, learningRate) {}
+class LastLinearLayer : public Layer{
+public:
+
+    Eigen::MatrixXd weight;
+    Eigen::VectorXd bias;
+    double learning_rate;
+    Adam adam_optimiser;
+    bool init_vals=true;
+
+    LastLinearLayer(const int batchSize, Eigen::MatrixXd weight, Eigen::VectorXd bias, const double learning_rate) :
+        Layer(layer_type::LAST_LINEAR, weight.rows(), batchSize), weight(weight), bias(bias), learning_rate(learning_rate), 
+        adam_optimiser(this->weight, this->bias, learning_rate) {}
+
+    ALTMIN_INLINE void forward(const Eigen::Ref<Eigen::MatrixXd>& inputs, bool store_codes=false) noexcept{
+        layer_output = lin(inputs, weight, bias);
+    }
+
+   
+    ALTMIN_INLINE Eigen::MatrixXd& get_weight() noexcept{
+        return weight;
+    }
+
+    ALTMIN_INLINE Eigen::VectorXd& get_bias() noexcept{
+        return bias;
+    }
+
+    ALTMIN_INLINE void adam(const Eigen::Ref<Eigen::MatrixXd>& grad_weight, const Eigen::Ref<Eigen::VectorXd>& grad_bias) noexcept {
+        if (init_vals){
+            adam_optimiser.template adam<true>(grad_weight, grad_bias);
+        }else{
+            adam_optimiser.template adam<false>(grad_weight, grad_bias);
+        }
+        
+        init_vals = false;
+    }
+
 };
 
-struct Relu : public NonLinear {
-    Relu(const int n, const int batchSize) : NonLinear(n, batchSize) {}
-    ALTMIN_INLINE void forward(const nanobind::DRef<Eigen::MatrixXd>& inputs) noexcept { layer_output = ReLU(inputs); }
-    ALTMIN_INLINE void differentiate_layer(const nanobind::DRef<Eigen::MatrixXd>& inputs) noexcept {
+class ReluLayer : public Layer{
+public:
+    ReluLayer(const int n, const int batch_size): Layer(layer_type::RELU, n,batch_size){};
+    ALTMIN_INLINE void forward(const Eigen::Ref<Eigen::MatrixXd>& inputs, bool store_codes=false) noexcept{
+        layer_output = ReLU(inputs);
+    }
+    ALTMIN_INLINE void differentiate_layer(const Eigen::Ref<Eigen::MatrixXd>& inputs) noexcept{
         dout = differentiate_ReLU(inputs);
     }
 };
 
-struct Sigmoid : public NonLinear {
-    Sigmoid(const int n, const int batchSize) : NonLinear(n, batchSize) {}
-    ALTMIN_INLINE void forward(const nanobind::DRef<Eigen::MatrixXd>& inputs) noexcept {
+class SigmoidLayer : public Layer{
+public:
+    SigmoidLayer(const int n, const int batch_size): Layer(layer_type::SIGMOID, n,batch_size){};
+    ALTMIN_INLINE void forward(const Eigen::Ref<Eigen::MatrixXd>& inputs , bool store_codes=false) noexcept{
         layer_output = sigmoid(inputs);
     }
-    ALTMIN_INLINE void differentiate_layer(const nanobind::DRef<Eigen::MatrixXd>& inputs) noexcept {
+    ALTMIN_INLINE void differentiate_layer(const Eigen::Ref<Eigen::MatrixXd>& inputs) noexcept{
         dout = differentiate_sigmoid(inputs);
     }
 };

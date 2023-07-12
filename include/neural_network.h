@@ -2,396 +2,259 @@
 // Created by mbarbone on 6/26/23.
 //
 
+//
+// Edited by Tom 6/07/23
+// Completly rework neural network class
+
 #ifndef FAST_ALTMIN_NEURAL_NETWORK_H
 #define FAST_ALTMIN_NEURAL_NETWORK_H
 
 #include "layers.h"
+#include <nanobind/eigen/dense.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/bind_map.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/stl/unique_ptr.h>
+
+
+#include <cmath>
+#include <iostream>
+#include <utility>
+#include <vector>
+#include <tuple>
+#include <thread>
 
 enum loss_t { BCE, MSE, CrossEntropy };
 
-namespace {
-using layer_t = std::variant<Linear, Relu, Sigmoid, LastLinear>;
-}
+template <loss_t loss>
+class NeuralNetwork{
+public:
+    NeuralNetwork(){
+        const auto n_threads = std::thread::hardware_concurrency();
+        Eigen::setNbThreads(n_threads);
+        
+    };
+    std::vector<std::shared_ptr<Layer>> layers;
+    std::vector<std::tuple<int,int>> weight_pairs; 
+    bool init_vals = true;
+    
 
-template <loss_t Loss>
-class NeuralNetwork {
-   public:
-    NeuralNetwork(int n_iter_codes,
-                  int n_iter_weights,
-                  int batch_size,
-                  int m,
-                  double lr_codes,
-                  double mu,
-                  double momentum)
-        :  ////////// Model hyperparemters
-           /////////////////////////////////////////////////////////////////////
-          n_iter_codes(n_iter_codes),
-          n_iter_weights(n_iter_weights),
-          lr_codes(lr_codes),
-          mu(mu),
-          momentum(momentum),
-          batch_size(batch_size),
-          //////////////////////////////////////////////////////////////////////
-          inputs(batch_size, m) {}
-    // Create a non linear layer and add to layers vector
-
-    ALTMIN_INLINE void emplace_relu(const int batch_size, const int n) { layers.emplace_back(Relu(n, batch_size)); }
-
-    ALTMIN_INLINE void emplace_sigmoid(const int batch_size, const int n) {
-        layers.emplace_back(Sigmoid{n, batch_size});
+    ALTMIN_INLINE void addLinearLayer(const int batch_size, const nanobind::DRef<Eigen::MatrixXd>& weight,
+        const nanobind::DRef<Eigen::VectorXd>& bias, const double learning_rate) noexcept {
+            auto ptr = std::make_shared<LinearLayer>(batch_size, weight, bias, learning_rate);
+            layers.emplace_back(std::move(ptr));
     }
 
-    ALTMIN_INLINE void emplace_linear(const int batch_size,
-                                      const int n,
-                                      const int m,
-                                      const nanobind::DRef<Eigen::MatrixXd>& weight,
-                                      const nanobind::DRef<Eigen::VectorXd>& bias,
-                                      const double lr) {
-        layers.emplace_back(Linear{n, batch_size, m, weight, bias, lr});
+    ALTMIN_INLINE void addLastLinearLayer(const int batch_size, const nanobind::DRef<Eigen::MatrixXd>& weight,
+        const nanobind::DRef<Eigen::VectorXd>& bias, const double learning_rate) noexcept {
+            auto ptr = std::make_shared<LastLinearLayer>(batch_size, weight, bias, learning_rate);
+            layers.emplace_back(std::move(ptr));
     }
 
-    ALTMIN_INLINE void emplace_last_linear(const int batch_size,
-                                           const int n,
-                                           const int m,
-                                           const nanobind::DRef<Eigen::MatrixXd>& weight,
-                                           const nanobind::DRef<Eigen::VectorXd>& bias,
-                                           const double lr) {
-        layers.emplace_back(LastLinear{n, batch_size, m, weight, bias, lr});
+    ALTMIN_INLINE void addReluLayer(const int n, const int batch_size) noexcept {
+        auto ptr = std::make_shared<ReluLayer>(n,batch_size);
+        layers.emplace_back(std::move(ptr));
     }
 
-    ALTMIN_INLINE int get_idx_next_layer_with_codes(int idx) noexcept {
-        auto index = 0;
-        for (int i = idx; i < layers.size(); ++i) {
-            if (std::holds_alternative<Linear>(layers[i])) { return index; }
-        }
-        return static_cast<int>(layers.size() - 1);
+    ALTMIN_INLINE void addSigmoidLayer(const int n, const int batch_size) noexcept {
+        auto ptr = std::make_shared<SigmoidLayer>(n,batch_size);
+        layers.emplace_back(std::move(ptr));
     }
 
-    ALTMIN_INLINE void add_to_vectors(const int start_idx,
-                                      const int layer_idx,
-                                      const int end_idx,
-                                      const int derivative_idx) {
-        weight_pairs.emplace_back(start_idx, layer_idx, end_idx, derivative_idx);
-        auto getWeight = [this, layer_idx]() {
-            auto& arg = layers[layer_idx];
-            if (std::holds_alternative<Linear>(arg)) { return std::get<Linear>(arg).m_weight; }
-            return std::get<LastLinear>(arg).m_weight;
-        };
-        const auto& weight = getWeight();
-        weight_dL_douts.emplace_back(batch_size, weight.rows());
-        dL_dWs.emplace_back(weight.rows(), weight.cols());
-        dL_dbs.emplace_back(weight.rows(), 1);
-    }
-
-    // Create pairs of layers needed to update the codes and weights so you
-    // don't have to iterate over all the layers each time Only run once after
-    // all layers have been added to the nn
-    ALTMIN_INLINE void construct_pairs() {
-        int end_idx;
-        int start_idx      = 0;
-        int derivative_idx = 0;
-        auto last          = false;
-        for (auto idx = 0; idx < layers.size() && !last; idx++) {
-            std::visit(
-                [&idx, &last, &start_idx, &end_idx, &derivative_idx, this](auto&& arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, Linear>) {
-                        end_idx = get_idx_next_layer_with_codes(idx);
-                        add_to_vectors(start_idx, idx, end_idx, derivative_idx);
-                        derivative_idx += 1;
-                    }
-                    if constexpr (std::is_same_v<T, LastLinear>) {
-                        end_idx = get_idx_next_layer_with_codes(idx);
-                        code_pairs.insert(code_pairs.begin(), std::make_tuple(idx, end_idx));
-                        add_to_vectors(start_idx, idx, idx, derivative_idx);
-                        derivative_idx += 1;
-                        start_idx = idx;
-                        last      = true;
-                    }
-                    // if it is not a linear layer or a last linear layer it
-                    // does nothing
-                },
-                layers[idx]);
-        }
-    }
-
-    // //This is used in the calculate the input for the partial derivative
-    ALTMIN_INLINE void calc_matrix_for_derivative(const nanobind::DRef<Eigen::MatrixXd>& inputs,
-                                                  const int idx,
-                                                  const int end_idx) noexcept {
-        auto applyForward = [&idx, &end_idx](auto&& arg, auto&& inputs) {
-            if (std::holds_alternative<Linear>(arg)) { std::get<Linear>(arg).forward(inputs, false); }
-            if (std::holds_alternative<Relu>(arg)) { std::get<Relu>(arg).forward(inputs); }
-            if (std::holds_alternative<Sigmoid>(arg)) { std::get<Sigmoid>(arg).forward(inputs); }
-            if (std::holds_alternative<LastLinear>(arg)) { std::get<LastLinear>(arg).forward(inputs, false); }
-        };
-
-        if (idx < end_idx) { applyForward(layers[idx], inputs); }
-        if (idx + 1 < end_idx) { applyForward(layers[idx + 1], getLayer(idx).layer_output); }
-        if (idx + 2 < end_idx) { applyForward(layers[idx + 2], getLayer(idx + 1).layer_output); }
-    }
-
-    // Apply the chain rule to calculate dw, db or dc depending on bool
-    // code_derivative
-    ALTMIN_INLINE void apply_chain_rule(const bool code_derivative) noexcept {
-        for (int idx = end_idx; idx > start_idx; idx--) {
-            std::visit(
-                [this, idx](auto&& arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, Linear> || std::is_same_v<T, LastLinear>) {
-                        dL_dout = dL_dout.cwiseProduct(arg.dout);
-                    }
-                    if constexpr (std::is_same_v<T, Sigmoid>) { dL_dout = dL_dout * arg.dout; }
-                    if constexpr (std::is_same_v<T, Relu>) { dL_dout = dL_dout.cwiseProduct(arg.dout); }
-                },
-                layers[idx]);
-        }
-        dL_dc = dL_dout;
-    }
-
-    ALTMIN_INLINE void apply_chain_rule_weights(const bool code_derivative,
-                                                const int start_idx,
-                                                const int end_idx,
-                                                const int derivative_idx) noexcept {
-        for (int idx = end_idx; idx > start_idx; idx--) {
-            std::visit(
-                [this, derivative_idx, idx](auto&& arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, Linear> || std::is_same_v<T, LastLinear>) {
-                        dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * arg.dout;
-                        dL_dbs[derivative_idx] = weight_dL_douts[derivative_idx].colwise().sum();
-                    }
-                    if constexpr (std::is_same_v<T, Sigmoid>) {
-                        weight_dL_douts[derivative_idx] = weight_dL_douts[derivative_idx].cwiseProduct(arg.dout);
-                    }
-                    if constexpr (std::is_same_v<T, Relu>) {
-                        weight_dL_douts[derivative_idx] = weight_dL_douts[derivative_idx].cwiseProduct(arg.dout);
-                    }
-                },
-                layers[idx]);
-        }
-    }
-
-    // USed to calc dw and db,   or dc depending on code_derivative
-    // Calc_matrix_for_derivative uses the layer_output member of the prev layer
-    // to store the input for partial derivative
-    ALTMIN_INLINE void calculate_gradients(const nanobind::DRef<Eigen::MatrixXd>& inputs,
-                                           const bool code_derivative,
-                                           const int start_idx,
-                                           const int end_idx,
-                                           const int derivative_idx) noexcept {
-        auto apply_differentiate = [](auto&& arg, auto& inputs, auto code_derivative) {
-            if (std::holds_alternative<Linear>(arg)) {
-                std::get<Linear>(arg).differentiate_layer(inputs, code_derivative);
-            }
-            if (std::holds_alternative<Relu>(arg)) { std::get<Relu>(arg).differentiate_layer(inputs); }
-            if (std::holds_alternative<Sigmoid>(arg)) { std::get<Sigmoid>(arg).differentiate_layer(inputs); }
-            if (std::holds_alternative<LastLinear>(arg)) {
-                std::get<LastLinear>(arg).differentiate_layer(inputs, code_derivative);
-            }
-        };
-
-        auto getLayerOutput = [](auto&& arg, auto& inputs, auto code_derivative) -> auto& {
-            using T = std::decay_t<decltype(arg)>;
-            std::get<T>(arg).layer_output;
-        };
-
-        auto getDout = [](auto&& arg) -> auto& {
-            using T = std::decay_t<decltype(arg)>;
-            return std::get<T>(arg).dout;
-        };
-
-        if (start_idx == end_idx) {
-            apply_differentiate(layers[end_idx], inputs, code_derivative);
-            dL_dWs[derivative_idx] = weight_dL_douts[derivative_idx].transpose() * getLinear(start_idx).dout;
-            dL_dbs[derivative_idx] = weight_dL_douts[derivative_idx].colwise().sum();
-            return;
-        } else {
-            calc_matrix_for_derivative(inputs, start_idx + 1, end_idx);
-            apply_differentiate(layers[end_idx], getLayer(end_idx - 1).layer_output, code_derivative);
-        }
-
-        if (end_idx - 1 > start_idx) {
-            if (end_idx - 1 == start_idx + 1) {
-                apply_differentiate(layers[end_idx - 1], inputs, code_derivative);
-            } else {
-                calc_matrix_for_derivative(inputs, start_idx + 1, end_idx - 1);
-                apply_differentiate(layers[end_idx - 1], getLayer(end_idx - 2).layer_output, code_derivative);
-            }
-        }
-
-        if (end_idx - 2 > start_idx) {
-            if (end_idx - 2 == start_idx + 1) {
-                apply_differentiate(layers[end_idx - 2], inputs, code_derivative);
-            } else {
-                calc_matrix_for_derivative(inputs, start_idx + 1, end_idx - 2);
-                apply_differentiate(layers[end_idx - 2], getLayer(end_idx-3).layer_output, code_derivative);
-            }
-        }
-
-        if (code_derivative) {
-            apply_chain_rule(code_derivative);
-        } else {
-            apply_chain_rule_weights(false, start_idx, end_idx, derivative_idx);
-        }
-    }
-    // Update the codes
-    ALTMIN_INLINE void update_codes(const nanobind::DRef<Eigen::MatrixXd>& targets) noexcept {
-        bool last_layer = true;
-        int idx_last_code;
-        // My way of dealing with cross entropy
-        // There will be a better way
-        Eigen::VectorXd class_labels;
-        if constexpr (Loss == loss_t::CrossEntropy) { class_labels = Eigen::VectorXd{targets.reshaped()}; }
-
-        for (auto [start_idx, end_idx] : code_pairs) {
-            for (size_t it = 0; it < n_iter_codes; it++) {
-                inputs = getLinear(start_idx).m_codes;
-                calc_matrix_for_derivative(inputs, start_idx + 1, end_idx + 1);
-                if (!last_layer) {
-                    dL_dout =
-                        differentiate_MSELoss(getLinear(idx_last_code).layer_output, getLinear(idx_last_code).m_codes);
-
-                } else {
-                    if constexpr (Loss == loss_t::BCE) {
-                        dL_dout = (1.0 / mu) * differentiate_BCELoss(getLinear(end_idx).layer_output, targets);
-                    }
-                    if constexpr (Loss == loss_t::MSE) {
-                        dL_dout = (1.0 / mu) * differentiate_MSELoss(getLinear(end_idx).layer_output, targets);
-                    }
-                    if constexpr (Loss == loss_t::CrossEntropy) {
-                        dL_dout = (1.0 / mu) * differentiate_CrossEntropyLoss(
-                                                   getLinear(end_idx).layer_output, class_labels,
-                                                   static_cast<int>(getLinear(end_idx).layer_output.cols()));
-                    }
-                }
-                last_layer = false;
-                calculate_gradients(getLinear(start_idx).m_codes, true, start_idx, end_idx, -1);
-                getLinear(start_idx).m_codes = getLinear(start_idx).m_codes - (((1.0 + momentum) * lr_codes) * dL_dc);
-                idx_last_code                = start_idx;
+    ALTMIN_INLINE void construct_pairs() noexcept {
+        int prev_idx = 0;
+        for (int x = 0; x<layers.size(); x++){
+            if (layers[x]->layer == layer_type::LINEAR || layers[x]->layer == layer_type::LAST_LINEAR ){
+                weight_pairs.emplace_back(prev_idx,x);
+                prev_idx = x;
             }
         }
     }
 
-    // //data gets changed in place and is used in multiple places so would need
-    // to be copied anyway so no point passing a reference.
-    ALTMIN_INLINE void update_weights(const nanobind::DRef<Eigen::MatrixXd>& data_nb,
-                                      const nanobind::DRef<Eigen::MatrixXd>& targets_nb) noexcept {
-#pragma omp parallel for schedule(dynamic) default(none) shared(data_nb, targets_nb, weight_pairs, layers)
+
+    ALTMIN_INLINE Eigen::MatrixXd get_codes(const nanobind::DRef<Eigen::MatrixXd>& inputs, const bool training_mode) noexcept {
+        //not nice but can;t use auto for forward as virtual and nanobind is different to all the layer output inputs so maube easiers to convert once.
+        Eigen::MatrixXd in = inputs;
+        layers[0]->forward(in,training_mode);
+        for (int x = 1; x < layers.size();x++){
+            layers[x]->forward(layers[x-1]->layer_output,training_mode);
+        }
+        return layers[layers.size()-1]->layer_output;
+    }
+
+    ALTMIN_INLINE std::vector<Eigen::MatrixXd> return_codes() noexcept {
+        std::vector<Eigen::MatrixXd> codes; 
+        for (auto layer:layers){
+            if (layer->layer == layer_type::LINEAR){
+                codes.emplace_back(layer->get_codes());
+            }
+        }
+        return codes;
+    }
+
+    ALTMIN_INLINE std::vector<Eigen::MatrixXd> return_weights() noexcept {
+        std::vector<Eigen::MatrixXd> weights; 
+        for (auto layer:layers){
+            if (layer->layer == layer_type::LINEAR || layer->layer == layer_type::LAST_LINEAR){
+                weights.emplace_back(layer->get_weight());
+            }
+        }
+        return weights;
+    }
+
+    ALTMIN_INLINE std::vector<Eigen::VectorXd> return_biases() noexcept {
+        std::vector<Eigen::VectorXd> biases;
+        for (auto layer:layers){
+            if (layer->layer == layer_type::LINEAR || layer->layer == layer_type::LAST_LINEAR){
+                biases.emplace_back(layer->get_bias());
+            }
+        }
+        return biases;
+    }
+
+    ALTMIN_INLINE void set_codes(std::vector<nanobind::DRef<Eigen::MatrixXd>> codes)  noexcept {
+        int y = 0;
+        for (auto &layer: layers) {
+            if (layer->layer == layer_type::LINEAR){
+                layer->set_codes(codes[y]);
+                y += 1;
+            }
+        }
+    }
+
+    //https://eigen.tuxfamily.org/dox/TopicPitfalls.html
+    ALTMIN_INLINE void update_codes(const nanobind::DRef<Eigen::MatrixXd> &targets) noexcept {
+        Eigen::MatrixXd dc;
+        if constexpr(loss == loss_t::BCE){ dc = (1/0.003) * differentiate_BCELoss(layers[layers.size()-1]->layer_output, targets); }
+        else if constexpr(loss == loss_t::MSE) {dc =  (1/0.003) * differentiate_MSELoss(layers[layers.size()-1]->layer_output, targets);}
+        else if constexpr(loss == loss_t::CrossEntropy) {
+            auto class_labels = Eigen::VectorXd{targets.reshaped()};
+            dc = (1/0.003) * 
+                differentiate_CrossEntropyLoss(layers[layers.size()-1]->layer_output, class_labels,
+                 static_cast<int>(layers[layers.size()-1]->layer_output.cols()));
+        }
+
+        for(int x = layers.size()-1; x >= 0; x--){
+            if (layers[x]->layer == layer_type::LINEAR){
+                layers[x]->update_codes(dc);
+                if (x==0){return;}
+                dc = differentiate_MSELoss(layers[x]->layer_output, layers[x]->get_codes() );
+                dc *= layers[x]->get_weight();
+            }else if (layers[x]->layer == layer_type::LAST_LINEAR){
+                dc *= layers[x]->get_weight();
+            }else{
+                layers[x]->differentiate_layer(layers[x-1]->layer_output);
+                dc.array() *= layers[x]->dout.array();
+            }
+        }
+    }
+
+    ALTMIN_INLINE void update_weights_not_parallel(const nanobind::DRef<Eigen::MatrixXd> &data_nb,
+                                      const nanobind::DRef<Eigen::MatrixXd> &targets_nb) noexcept {
         for (int x = 0; x < weight_pairs.size(); x++) {
+            auto indexes = weight_pairs[x];
+            const int start_idx = std::get<0>(indexes);
+            const int end_idx = std::get<1>(indexes);
+            //first layer
             if (x == 0) {
-                update_weights_parallel(data_nb, weight_pairs[x], targets_nb, true);
-            } else {
-                update_weights_parallel(getLinear(std::get<0>(weight_pairs[x])).m_codes, weight_pairs[x], targets_nb,
-                                        false);
+                Eigen::MatrixXd data = data_nb;
+                update_weights<true>(data, layers[end_idx]->get_codes(), start_idx, end_idx);
+            }
+            //last layer
+            else if (x==weight_pairs.size()-1){ 
+                const int layer_idx = end_idx;
+                update_last_weights(layers[start_idx]->get_codes(), targets_nb, start_idx+1, layer_idx);  
+            }
+            //hidden layers
+            else {
+                update_weights<false>(layers[start_idx]->get_codes(), layers[end_idx]->get_codes(), start_idx+1, end_idx);
             }
         }
     }
 
-    ALTMIN_INLINE void update_weights_parallel(const nanobind::DRef<Eigen::MatrixXd>& inputs,
-                                               const std::tuple<int, int, int, int>& indexes,
-                                               const nanobind::DRef<Eigen::MatrixXd>& targets,
-                                               bool first_layer) noexcept {
-        int start_idx_parallel      = std::get<0>(indexes);
-        int layer_idx_parallel      = std::get<1>(indexes);
-        int end_idx_parallel        = std::get<2>(indexes);
-        int derivative_idx_parallel = std::get<3>(indexes);
-        Eigen::VectorXd class_labels;
-        if constexpr (Loss == loss_t::CrossEntropy) { class_labels = Eigen::VectorXd{targets.reshaped()}; }
+    ALTMIN_INLINE void update_weights_parallel(const nanobind::DRef<Eigen::MatrixXd> &data_nb,
+                                      const nanobind::DRef<Eigen::MatrixXd> &targets_nb) noexcept {
 
-        for (size_t it = 0; it < n_iter_weights; it++) {
-            // populate outputs
-            if (first_layer) {
-                // weight_inputs[derivative_idx] = data;
-                calc_matrix_for_derivative(inputs, start_idx_parallel, end_idx_parallel + 1);
+        
+#pragma omp parallel for schedule(dynamic) default(none) shared(data_nb, targets_nb, weight_pairs, layers)
+        
 
-                weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(
-                    getLinear(layer_idx_parallel).layer_output, getLinear(layer_idx_parallel).m_codes);
-            } else {
-                calc_matrix_for_derivative(inputs, start_idx_parallel + 1, end_idx_parallel + 1);
-
-                if (end_idx_parallel == (layers.size() - 1)) {
-                    if constexpr (Loss == loss_t::BCE) {
-                        weight_dL_douts[derivative_idx_parallel] =
-                            differentiate_BCELoss(getLinear(end_idx_parallel).layer_output, targets);
-                    }
-                    if constexpr (Loss == loss_t::MSE) {
-                        weight_dL_douts[derivative_idx_parallel] =
-                            differentiate_MSELoss(getLinear(end_idx_parallel).layer_output, targets);
-                    }
-                    if constexpr (Loss == loss_t::CrossEntropy) {
-                        weight_dL_douts[derivative_idx_parallel] = differentiate_CrossEntropyLoss(
-                            getLinear(end_idx_parallel).layer_output, class_labels,
-                            static_cast<int>(getLinear(end_idx_parallel).layer_output.cols()));
-                    }
-
-                } else {
-                    weight_dL_douts[derivative_idx_parallel] = differentiate_MSELoss(
-                        getLinear(end_idx_parallel).layer_output, getLinear(end_idx_parallel).m_codes);
-                }
+        for (int x = 0; x < weight_pairs.size(); x++) {
+            auto indexes = weight_pairs[x];
+            const int start_idx = std::get<0>(indexes);
+            const int end_idx = std::get<1>(indexes);
+            //first layer
+            if (x == 0) {
+                //can't avoid this as can't template forward
+                Eigen::MatrixXd data = data_nb;
+                update_weights<true>(data, layers[end_idx]->get_codes(), start_idx, end_idx);
             }
-
-            // Seperate functions so only have to pass the data if necesseray
-            // std::optional may be better
-
-            calculate_gradients(inputs, false, start_idx_parallel, end_idx_parallel, derivative_idx_parallel);
-
-            getLinear(layer_idx_parallel).template adam<false>(dL_dWs[derivative_idx_parallel], dL_dbs[derivative_idx_parallel]);
+            //last layer
+            else if (x==weight_pairs.size()-1){ 
+                const int layer_idx = end_idx;
+                update_last_weights(layers[start_idx]->get_codes(), targets_nb, start_idx+1, layer_idx);  
+            }
+            //hidden layers
+            else {
+                update_weights<false>(layers[start_idx]->get_codes(), layers[end_idx]->get_codes(), start_idx+1, end_idx);
+            }
         }
     }
 
-   private:
-    std::vector<layer_t> layers;
-    Eigen::MatrixXd inputs;
+    template <bool first_layer, typename T, typename G>
+    ALTMIN_INLINE void update_weights(T& inputs, const G& targets, const int start_idx, const int end_idx) noexcept {
+        //Do necessary forward pass first
+        layers[start_idx]->forward(inputs, false);
 
-    // Model hyperparams
-    size_t n_iter_codes;
-    size_t n_iter_weights;
-    double lr_codes;
-    double lr_weights;
-    double mu;
-    int criterion;
-    double momentum = 0.9;
-    int batch_size;
-
-    // Used in parallel weight gradient calc
-    std::vector<Eigen::MatrixXd> weight_dL_douts;
-    std::vector<Eigen::MatrixXd> dL_dWs;
-    std::vector<Eigen::VectorXd> dL_dbs;
-
-    // Used to calc dL_dc
-    Eigen::MatrixXd dL_dout;
-    Eigen::MatrixXd dL_dc;
-
-    // Used so don't have to iterate over all layers each time to find layers
-    // needed to update weights and codes
-    std::vector<std::tuple<int, int>> code_pairs;
-    std::vector<std::tuple<int, int, int, int>> weight_pairs;
-    int start_idx;
-    int layer_idx;
-    int end_idx;
-
-    ALTMIN_INLINE constexpr Linear& getLinear(int idx) {
-        auto& arg = layers[idx];
-        if (std::holds_alternative<Linear>(arg)) { return std::get<Linear>(arg); }
-        if (std::holds_alternative<Relu>(arg)) {
-            throw std::runtime_error("Relu layer not supported");
-            return reinterpret_cast<Linear&>(std::get<Relu>(arg));
+        for (int idx = start_idx+1; idx <= end_idx; idx++){
+            layers[idx]->forward(layers[idx-1]->layer_output, false);
         }
-        if (std::holds_alternative<Sigmoid>(arg)) {
-            throw std::runtime_error("Relu layer not supported");
-            return reinterpret_cast<Linear&>(std::get<Sigmoid>(arg));
+
+        
+        
+        Eigen::MatrixXd dout = differentiate_MSELoss(layers[end_idx]->layer_output, targets );
+        Eigen::MatrixXd dW;
+        if constexpr (first_layer){
+            dW = dout.transpose() * inputs;
+        }else{
+            dW = dout.transpose() * layers[end_idx-1]->layer_output;
         }
-        if (std::holds_alternative<LastLinear>(arg)) { return std::get<LastLinear>(arg); }
+        Eigen::VectorXd db = dout.colwise().sum();
+        layers[end_idx]->adam(dW, db);
+
     }
 
-    ALTMIN_INLINE constexpr Layer& getLayer(int idx) {
-        auto& arg = layers[idx];
-        if (std::holds_alternative<Linear>(arg)) { return std::get<Linear>(arg); }
-        if (std::holds_alternative<Relu>(arg)) { return std::get<Relu>(arg); }
-        if (std::holds_alternative<Sigmoid>(arg)) { return std::get<Sigmoid>(arg); }
-        if (std::holds_alternative<LastLinear>(arg)) { return std::get<LastLinear>(arg); }
+    template <typename T, typename G>
+    ALTMIN_INLINE void update_last_weights(T& inputs,const G& targets, const int start_idx, const int layer_idx) noexcept {
+        const int end_idx = layers.size()-1;
+        layers[start_idx]->forward(inputs, false);
+
+        for (int idx = start_idx+1; idx <= end_idx; idx++){
+            layers[idx]->forward(layers[idx-1]->layer_output, false);
+        }
+
+        Eigen::MatrixXd dout;
+        if constexpr(loss == loss_t::BCE) { dout = differentiate_BCELoss(layers[end_idx]->layer_output, targets);}
+        else if constexpr(loss == loss_t::MSE) {dout = differentiate_MSELoss(layers[end_idx]->layer_output, targets);}
+        else if constexpr(loss == loss_t::CrossEntropy) {
+            auto class_labels = Eigen::VectorXd{targets.reshaped()};
+            dout = differentiate_CrossEntropyLoss(layers[end_idx]->layer_output, class_labels,
+                                                    static_cast<int>(layers[end_idx]->layer_output.cols()));}
+        
+        for (int idx = end_idx; idx > layer_idx; idx--){
+            layers[idx]->differentiate_layer(layers[idx-1]->layer_output);
+            dout.array() *= layers[end_idx]->dout.array();
+        }
+        
+        Eigen::MatrixXd dW = dout.transpose() * layers[layer_idx-1]->layer_output;
+        Eigen::VectorXd db = dout.colwise().sum();
+        layers[layer_idx]->adam(dW, db);
     }
+
+
 };
 
 #endif  // FAST_ALTMIN_NEURAL_NETWORK_H
