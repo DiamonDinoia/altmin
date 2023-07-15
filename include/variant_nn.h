@@ -28,7 +28,6 @@
 #include <thread>
 
 enum loss_t { BCE, MSE, CrossEntropy };
-
 template <loss_t loss>
 class VariantNeuralNetwork{
 public:
@@ -204,34 +203,6 @@ public:
         }
     }
 
-//     ALTMIN_INLINE void update_weights_parallel(const nanobind::DRef<Eigen::MatrixXd> &data_nb,
-//                                       const nanobind::DRef<Eigen::MatrixXd> &targets_nb) noexcept {
-
-        
-// #pragma omp parallel for schedule(dynamic) default(none) shared(data_nb, targets_nb, weight_pairs, layers)
-        
-
-//         for (int x = 0; x < weight_pairs.size(); x++) {
-//             auto indexes = weight_pairs[x];
-//             const int start_idx = std::get<0>(indexes);
-//             const int end_idx = std::get<1>(indexes);
-//             //first layer
-//             if (x == 0) {
-//                 //can't avoid this as can't template forward
-//                 Eigen::MatrixXd data = data_nb;
-//                 update_weights<true>(data, layers[end_idx]->get_codes(), start_idx, end_idx);
-//             }
-//             //last layer
-//             else if (x==weight_pairs.size()-1){ 
-//                 const int layer_idx = end_idx;
-//                 update_last_weights(layers[start_idx]->get_codes(), targets_nb, start_idx+1, layer_idx);  
-//             }
-//             //hidden layers
-//             else {
-//                 update_weights<false>(layers[start_idx]->get_codes(), layers[end_idx]->get_codes(), start_idx+1, end_idx);
-//             }
-//         }
-//     }
 
     template <bool first_layer, typename T, typename G>
     ALTMIN_INLINE void update_weights(T& inputs, const G& targets, const int start_idx, const int end_idx) noexcept {
@@ -304,5 +275,72 @@ public:
 
 
 };
+
+template <loss_t loss>
+class VariantCNN{
+public:
+    VariantCNN(){
+        const auto n_threads = std::thread::hardware_concurrency();
+        Eigen::setNbThreads(n_threads);
+        
+    };
+    std::vector<std::variant<Conv2dLayer, ReluCNNLayer, MaxPool2dLayer>> layers;
+    std::vector<std::tuple<int,int>> weight_pairs; 
+    bool init_vals = true;
+
+    //Copy for now
+    ALTMIN_INLINE void addConv2dLayer(std::vector<std::vector<Eigen::MatrixXd>> kernels, Eigen::VectorXd bias, int batch_size, int C_in, int height, int width) noexcept{
+        layers.emplace_back(Conv2dLayer{kernels, bias, batch_size, C_in, height, width});
+    }
+
+    ALTMIN_INLINE void addMaxPool2dLayer(int kernel_size, int stride, int batch_size, int C, int height, int width) noexcept{
+        layers.emplace_back(MaxPool2dLayer{kernel_size, stride, batch_size, C, height, width});
+    }
+
+   
+
+    ALTMIN_INLINE void addReluCNNLayer(const int N, const int C, const int H, const int W) noexcept {
+        layers.emplace_back(ReluCNNLayer{N, C, H, W});
+    }
+
+
+    // ALTMIN_INLINE void construct_pairs() noexcept {
+    //     int prev_idx = 0;
+    //     for (int x = 0; x<layers.size(); x++){
+    //         if (layers[x].index() == 0 || layers[x].index() == 1 ){
+    //             weight_pairs.emplace_back(prev_idx,x);
+    //             prev_idx = x;
+    //         }
+    //     }
+    // }
+
+
+    ALTMIN_INLINE std::vector<std::vector<std::vector<Eigen::MatrixXd>>> return_codes_cnn() noexcept {
+        std::vector<std::vector<std::vector<Eigen::MatrixXd>>> codes;
+        for (auto& layer :layers){
+            if (layer.index() == 0){
+                codes.emplace_back(std::visit(CallGetCNNCodes{}, layer));
+            }
+        }
+        return codes;
+    }
+
+
+    ALTMIN_INLINE Eigen::MatrixXd get_codes_cnn(const std::vector<std::vector<Eigen::MatrixXd>> &inputs, const bool training_mode) noexcept {
+        std::visit(CallForwardCNN<decltype(inputs)>{inputs}, layers[0]);
+        for (int x = 1; x < layers.size();x++){
+            std::vector<std::vector<Eigen::MatrixXd>> in = std::visit(get_layer_output_cnn, layers[x-1]);
+            std::visit(CallForwardCNN<decltype(in)>{in}, layers[x]);
+        }
+        //std::vector<std::vector<Eigen::MatrixXd>> res = std::visit(get_layer_output_cnn, layers[0]);
+        std::vector<std::vector<Eigen::MatrixXd>> out = std::visit(get_layer_output_cnn, layers[layers.size()-1]);
+        return flatten(out);
+      
+    }
+
+
+};
+
+
 
 #endif  // FAST_ALTMIN_NEURAL_NETWORK_H

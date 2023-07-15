@@ -25,5 +25,5 @@ def create_model_class(model, neural_network, batch_size, n, last_layer = False,
         else:
             print("layer not imp yet")
 
-    #print("J")
+
     

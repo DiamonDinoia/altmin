@@ -1,6 +1,8 @@
 //#include "neural_network.h"
+//#include "cnn.h"
 #include "variant_nn.h"
-#include "variant.h"
+//#include "variant.h"
+
 
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
@@ -60,6 +62,52 @@ void test(const nanobind::DRef<Eigen::MatrixXd>& inputs){
     std::cout << "tesr " << inputs.IsRowMajor << std::endl;
 }
 
+// std::vector<Eigen::MatrixXd> conv2d(const nanobind::DRef<Eigen::MatrixXd> &input, const  std::vector<nanobind::DRef<Eigen::MatrixXd>> kernels, Eigen::VectorXd bias, const int height, const int width, const int channels_out){
+//     std::vector<Eigen::MatrixXd> res_vec; 
+//     Eigen::MatrixXd res(width, height);
+//     int kernel_size_rows = kernels[0].rows();
+//     int kernel_size_cols = kernels[0].cols();
+//     for (int c =0; c < channels_out; c++){
+//         for (int i = 0; i < height; i++){
+//             for(int j=0; j < width; j++){
+//                 res(i,j) = (input.block(i,j,kernel_size_rows,kernel_size_cols).cwiseProduct(kernels[c])).sum()+bias[c];
+//             }
+//         }
+//         res_vec.emplace_back(res);
+//     }
+    
+//     return res_vec;
+
+// }
+
+
+// Eigen::MatrixXd flatten(std::vector<std::vector<Eigen::MatrixXd>> inputs, int dim_0){
+//     int dim_1 = inputs[0].size() * inputs[0][0].rows() * inputs[0][0].cols();
+//     int matrix_size = inputs[0][0].rows() * inputs[0][0].cols();
+//     Eigen::MatrixXd res(dim_0, dim_1);
+//     res.setZero(dim_0,dim_1);
+//     //std::cout << "Res shape " << res.rows() <<  " " << res.cols() << std::endl;
+//     int col_pos = 0;
+//     for (int x = 0 ; x < inputs.size(); x++){
+//         int row_pos = 0;
+//         for (int y = 0; y < inputs[0].size(); y++){
+//             //std::cout << x_pos << " " << y_pos << std::endl;
+//             res.block(row_pos,col_pos, 1, matrix_size) = inputs[x][y].reshaped<Eigen::RowMajor>().transpose();
+//std::cout << x_pos << " " << y_pos << std::endl;
+//             //std::cout << res << std::endl;
+//             col_pos += matrix_size;
+//         }   
+//         col_pos = 0;
+//         row_pos+=1;
+//     }
+
+//     std::cout << "End " << std::endl;
+//     std::cout << res << std::endl;
+//     return res;
+// }
+
+ALTMIN_INLINE Eigen::MatrixXd py_flatten(std::vector<std::vector<Eigen::MatrixXd>> & inputs){return flatten(inputs);}
+
 ALTMIN_INLINE Eigen::MatrixXd py_lin(const nanobind::DRef<Eigen::MatrixXd> &input,
         const nanobind::DRef<Eigen::MatrixXd> &weight,
         const nanobind::DRef<Eigen::VectorXd> &bias) noexcept {return lin(input,weight,bias);}
@@ -104,22 +152,22 @@ ALTMIN_INLINE auto py_differentiate_CrossEntropyLoss(const nanobind::DRef<Eigen:
 
 //Credit to Marco Barbone: ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <typename T, typename V>
-constexpr void addNNDefs(T& nn) {
-    nn.def(nanobind::init<>())
-        .def("addSigmoidLayer", &V::addSigmoidLayer)
-        .def("addReluLayer", &V::addReluLayer)
-        .def("addLinearLayer", &V::addLinearLayer)
-        .def("addLastLinearLayer", &V::addLastLinearLayer)
-        .def("construct_pairs", &V::construct_pairs)
-        .def("get_codes", &V::get_codes)
-        .def("update_codes", &V::update_codes)
-        .def("update_weights_parallel", &V::update_weights_parallel)
-        .def("update_weights_not_parallel", &V::update_weights_not_parallel)
-        .def("return_codes", &V::return_codes)
-        .def("return_weights", &V::return_weights)
-        .def("return_biases", &V::return_biases);
-}
+// template <typename T, typename V>
+// constexpr void addNNDefs(T& nn) {
+//     nn.def(nanobind::init<>())
+//         .def("addSigmoidLayer", &V::addSigmoidLayer)
+//         .def("addReluLayer", &V::addReluLayer)
+//         .def("addLinearLayer", &V::addLinearLayer)
+//         .def("addLastLinearLayer", &V::addLastLinearLayer)
+//         .def("construct_pairs", &V::construct_pairs)
+//         .def("get_codes", &V::get_codes)
+//         .def("update_codes", &V::update_codes)
+//         .def("update_weights_parallel", &V::update_weights_parallel)
+//         .def("update_weights_not_parallel", &V::update_weights_not_parallel)
+//         .def("return_codes", &V::return_codes)
+//         .def("return_weights", &V::return_weights)
+//         .def("return_biases", &V::return_biases);
+// }
 
 template <typename T, typename V>
 constexpr void addVarNNDefs(T& nn) {
@@ -137,6 +185,27 @@ constexpr void addVarNNDefs(T& nn) {
         .def("return_weights", &V::return_weights)
         .def("return_biases", &V::return_biases);
 }
+
+template <typename T, typename V>
+constexpr void addVarCNNDefs(T& nn) {
+    nn.def(nanobind::init<>())
+        .def("addConv2dLayer", &V::addConv2dLayer)
+        .def("addMaxPool2dLayer", &V::addMaxPool2dLayer)
+        //.def("addFlattenLayer", &V::addFlattenLayer)
+        // .def("addSigmoidLayer", &V::addSigmoidLayer)
+        .def("addReluCNNLayer", &V::addReluCNNLayer)
+        // .def("addLinearLayer", &V::addLinearLayer)
+        // .def("addLastLinearLayer", &V::addLastLinearLayer)
+        // .def("construct_pairs", &V::construct_pairs)
+        .def("get_codes_cnn", &V::get_codes_cnn)
+        // .def("update_codes", &V::update_codes)
+        // .def("update_weights_not_parallel", &V::update_weights_not_parallel)
+        // .def("update_weights_parallel", &V::update_weights_parallel)
+        .def("return_codes_cnn", &V::return_codes_cnn);
+        // .def("return_weights", &V::return_weights)
+        // .def("return_biases", &V::return_biases);
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -162,7 +231,10 @@ NB_MODULE(fast_altmin, m) {
     m.def("negative_log_likelihood", &py_negative_log_likelihood);
     m.def("cross_entropy_loss", &py_cross_entropy_loss);
     m.def("differentiate_CrossEntropyLoss", &py_differentiate_CrossEntropyLoss);
-    m.def("test_variant", &test_variant);
+    m.def("flatten", &py_flatten);
+    //m.def("flatten", &flatten);
+    //m.def("conv2d", &conv2d);
+    //m.def("maxpool2d", &maxpool2d);
 
     // nanobind::class_<Layer>(m, "Layer")
     //     .def(nanobind::init<layer_type, int,int>())
@@ -217,6 +289,8 @@ NB_MODULE(fast_altmin, m) {
     nanobind::class_<VariantNeuralNetwork<loss_t::CrossEntropy>> nnCrossEntropy(m, "VariantNeuralNetworkCrossEntropy");
     addVarNNDefs<nanobind::class_<VariantNeuralNetwork<loss_t::CrossEntropy>>, VariantNeuralNetwork<loss_t::CrossEntropy>>(nnCrossEntropy);
 
+    nanobind::class_<VariantCNN<loss_t::BCE>> cnnBCE(m, "VariantCNNBCE");
+    addVarCNNDefs<nanobind::class_<VariantCNN<loss_t::BCE>>, VariantCNN<loss_t::BCE>>(cnnBCE);
     // nanobind::class_<NeuralNetwork>(m, "NeuralNetwork")
     //     .def(nanobind::init<>())
     //     .def("addSigmoidLayer", &NeuralNetwork::addSigmoidLayer)

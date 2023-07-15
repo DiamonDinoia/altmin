@@ -11,6 +11,59 @@
 #include <Eigen/Dense>
 #include <thread>
 
+template <typename T>
+Eigen::MatrixXd flatten(T& inputs){
+    int dim_0 = inputs.size();
+    int dim_1 = inputs[0].size() * inputs[0][0].rows() * inputs[0][0].cols();
+    int matrix_size = inputs[0][0].rows() * inputs[0][0].cols();
+    Eigen::MatrixXd res(dim_0, dim_1);
+    res.setZero(dim_0,dim_1);
+    int row_pos = 0;
+    for (int x = 0 ; x < inputs.size(); x++){
+        int col_pos = 0;
+        for (int y = 0; y < inputs[0].size(); y++){
+            //defeats the point of templating
+            //use decltype to handel case of T being list of vectors
+            Eigen::MatrixXd tmp = inputs[x][y];
+
+            res.block(row_pos,col_pos, 1, matrix_size) = tmp.reshaped<Eigen::RowMajor>().transpose();
+            col_pos += matrix_size;
+        }   
+        row_pos+=1;
+    }
+
+    return res;
+}
+
+template <typename T>
+Eigen::MatrixXd conv2d(const T& input, const T& kernel, double bias, const int height, const int width){
+    Eigen::MatrixXd res(width, height);
+    int kernel_size_rows = kernel.rows();
+    int kernel_size_cols = kernel.cols();
+    for (int i = 0; i < height; i++){
+        for(int j=0; j < width; j++){
+            res(i,j) = (input.block(i,j,kernel_size_rows,kernel_size_cols).cwiseProduct(kernel)).sum()+bias;
+        }
+    }
+    return res;
+
+}
+
+template <typename T>
+Eigen::MatrixXd maxpool2d(const T &input, const int kernel_size, const int stride, const int height, const int width){
+    Eigen::MatrixXd res(width, height);
+    int count_i = 0;
+    for (int i = 0; i < height; i++){
+        int count_j = 0; 
+        for(int j=0; j < width; j++){
+            res(i,j) = input.block(count_i,count_j,kernel_size,kernel_size).maxCoeff();
+            count_j += stride;
+        }
+        count_i += stride;
+    }
+    return res;
+}
+
 //Chnages to this and bce loss have made it worse
 ALTMIN_INLINE auto lin(const auto & input,
                        const auto & weight,
@@ -193,12 +246,3 @@ ALTMIN_INLINE auto differentiate_CrossEntropyLoss(const T& output,
     return (res_two) / res.rows();
 }
 
-// auto res = output;
-//     softmax(res);
-//     std::cout << "a" << std::endl; 
-//     res-= one_hot_encoding(target, num_classes);
-//     std::cout << "b" << std::endl;
-//     res /= res.rows();
-//     std::cout << "c" << std::endl;
-
-//     return res;
