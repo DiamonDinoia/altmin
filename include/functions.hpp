@@ -213,6 +213,78 @@ ALTMIN_INLINE auto differentiate_ReLU(const T &x) noexcept {
     return res;
 }
 
+template <typename T>
+Eigen::MatrixXd differentiate_maxpool2d(const T &input, const int kernel_size, const int stride, const int height, const int width){
+    Eigen::MatrixXd res(input.rows(), input.cols());
+    res.setZero(input.rows(), input.cols());
+   
+    int count_i = 0;
+    for (int i = 0; i < height; i++){
+        int count_j = 0; 
+        for(int j=0; j < width; j++){
+            Eigen::Index maxRow, maxCol;
+
+            // pytorch argmax and maxCoeff both give index of first element if there are multiple elements with the same max value
+            // but argmax goes in row major order and maxcoeff goes in col major order so this can result in giving different indices as it leads to a different element being the first element seen for max value. 
+            // Either way is fine for computing the gradient but they give different gradients which means I can't unit test the implementation without doing the workaround below
+            // Current plan is to template with bool so that only does expensive workaround for unit tests
+            Eigen::MatrixXd tmp = input.block(count_i,count_j,kernel_size,kernel_size);
+            Eigen::VectorXd maxVec = tmp.rowwise().maxCoeff();
+            maxVec.maxCoeff(&maxRow);
+            Eigen::Index dummy;
+            tmp.row(maxRow).maxCoeff(&dummy, &maxCol);
+            res(count_i + maxRow, count_j + maxCol) = 1.0;
+
+            count_j += stride;
+        }
+        count_i += stride;
+    }
+     
+    return res;
+}
+
+
+
+//template with bool to indicate what partial derivative to calc
+template <typename T>
+Eigen::MatrixXd differentiate_conv2d(const T& input, const T& kernel, const int height, const int width, bool flag){
+    //dL_df
+    //kernel is dL_dO output from next layer
+    if (flag){
+        Eigen::MatrixXd res(width, height);
+        int kernel_size_rows = kernel.rows();
+        int kernel_size_cols = kernel.cols();
+        for (int i = 0; i < height; i++){
+            for(int j=0; j < width; j++){
+                res(i,j) = (input.block(i,j,kernel_size_rows,kernel_size_cols).cwiseProduct(kernel)).sum();
+            }
+        }
+        return res;
+    }else{
+        int kernel_size_rows = kernel.rows();
+        int kernel_size_cols = kernel.cols();
+        Eigen::MatrixXd input_padded (input.rows()+(kernel_size_rows*2)-2, input.cols()+(kernel_size_cols*2)-2);
+        input_padded.setZero();
+        input_padded.block(kernel_size_rows-1,kernel_size_cols-1, input.rows(), input.cols()) = input; 
+       
+
+        Eigen::MatrixXd res(width, height);
+       
+        Eigen::MatrixXd rotated_filter = kernel.transpose().colwise().reverse().transpose().colwise().reverse();
+
+        for (int i = 0; i < height; i++){
+            for(int j=0; j < width; j++){
+                res(i,j) = (input_padded.block(i,j,kernel_size_rows,kernel_size_cols).cwiseProduct(rotated_filter)).sum();
+            }
+        }
+        //std::cout << "Res " << res << std::endl;
+        return res;
+
+    }
+    
+
+}
+
 //both matirxXd but targets nanobind ref and output normal ref
 template <typename T, typename G>
 ALTMIN_INLINE auto differentiate_BCELoss(const T& output,
@@ -235,12 +307,27 @@ ALTMIN_INLINE auto differentiate_MSELoss(const T& output,
 }
 
 template <typename T, typename G>
+    ALTMIN_INLINE auto differentiate_MSELoss4d(const T& output,
+                                                    const G& target) noexcept{
+        const int N = output.size();
+        const int C = output[0].size();
+        std::vector<std::vector<Eigen::MatrixXd>> dc; 
+        for (int n = 0; n < N; n++){
+            std::vector<Eigen::MatrixXd> tmp; 
+            for (int c = 0; c < C; c++){
+                tmp.emplace_back(differentiate_MSELoss(output[n][c], target[n][c])/static_cast<double>(N*C));
+            }
+            dc.emplace_back(tmp);
+        }   
+        return dc;
+    }
+
+template <typename T, typename G>
 ALTMIN_INLINE auto differentiate_CrossEntropyLoss(const T& output,
                                                              const G& target,
                                                              const int num_classes) noexcept {
     Eigen::MatrixXd res = output;
     softmax(res);
-    std::cout << "a" << std::endl; 
     Eigen::MatrixXd tmp = one_hot_encoding(target, num_classes);
     Eigen::MatrixXd res_two = res - tmp; 
     return (res_two) / res.rows();

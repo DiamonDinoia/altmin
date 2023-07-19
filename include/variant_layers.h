@@ -55,7 +55,6 @@ class Adam {
 
         
         weight -= learning_rate * (weight_m_t_correct.cwiseQuotient((weight_v_t_correct.cwiseSqrt().array() + eps).matrix()));
-   
 
         // Update bias
         if constexpr(init_vals){
@@ -336,14 +335,21 @@ std::vector<std::variant<LinearLayer, LastLinearLayer, ReluLayer, SigmoidLayer>>
 class Conv2dLayer{
 public:
     std::vector<std::vector<Eigen::MatrixXd>> kernels; 
+    std::vector<std::vector<Adam>> adam_optimisers; 
     std::vector<std::vector<Eigen::MatrixXd>> layer_outputs;
     std::vector<std::vector<Eigen::MatrixXd>> codes;
-    Eigen::VectorXd bias; 
+    std::vector<std::vector<Eigen::MatrixXd>> dWs;
+    std::vector<std::vector<Eigen::MatrixXd>> layer_douts;
+    Eigen::VectorXd db; 
+    Eigen::VectorXd bias;
+    
+
     int N;
     int C_in;
     int C_out;
     int H;
     int W;
+    bool init_vals = true;
 
     Conv2dLayer(std::vector<std::vector<Eigen::MatrixXd>> kernels, Eigen::VectorXd bias, int N, int C_in, int H, int W) : kernels(kernels), bias(bias), N(N), C_in(C_in), C_out(kernels.size()), H(H), W(W){
         for (int n = 0; n < N; n++){
@@ -352,12 +358,53 @@ public:
                 tmp.emplace_back(Eigen::MatrixXd(H,W));
             }
             layer_outputs.emplace_back(tmp);
+            layer_douts.emplace_back(tmp);
         } 
+        //THink need to init db proper
+        db.setZero(bias.size());
+       
+        for (int c_out = 0; c_out < C_out; c_out++){
+            std::vector<Eigen::MatrixXd> tmp;
+            std::vector<Adam> adam_tmp;
+            for (int c_in = 0; c_in < C_in; c_in++){
+                tmp.emplace_back(Eigen::MatrixXd(kernels[0][0].rows(),kernels[0][0].rows()));
+                adam_tmp.emplace_back(Adam(kernels[0][0].rows(), kernels[0][0].rows(), 0.008));
+            }
+            dWs.emplace_back(tmp);
+            adam_optimisers.emplace_back(adam_tmp);
+        }
     }
+
+
+    //bias deffo wrong updated c_out to many times for each bias. Kinda not easy to fix. 
+    ALTMIN_INLINE void adam() noexcept {
+        std::cout << "adam called for conv2d " << kernels[C_out-1][C_in-1] << std::endl;
+        std::cout << "grad bias type " << db << std::endl;
+        if (init_vals){
+            for (int c_out = 0; c_out < C_out; c_out++){
+                for (int c_in = 0; c_in < C_in; c_in++){
+
+                    adam_optimisers[c_out][c_in].template adam<true>(kernels[c_out][c_in], bias, dWs[c_out][c_in], db);
+                    //db only needs to be done Cour times
+                    db.setZero(db.size());
+                }
+       
+            }
+            
+        }else{
+            for (int c_out = 0; c_out < C_out; c_out++){
+                for (int c_in = 0; c_in < C_in; c_in++){
+                    adam_optimisers[c_out][c_in].template adam<false>(kernels[c_out][c_in], bias, dWs[c_out][c_in], db);
+                }
+            }
+        }
+        init_vals=false;
+    }
+
 
     //works for one channel in atm
     template <typename T>
-    ALTMIN_INLINE void forward(const T& inputs) noexcept{
+    ALTMIN_INLINE void forward(const T& inputs, const bool train) noexcept{
         for (int n = 0; n < N; n++){
             for (int c_out = 0; c_out < C_out; c_out++){
                 Eigen::MatrixXd sum = Eigen::MatrixXd::Zero(H,W);
@@ -369,16 +416,90 @@ public:
                 }
                 
                 layer_outputs[n][c_out] = sum;
+                
             }
         }
-        codes = layer_outputs;      
+        if (train){ codes = layer_outputs; }      
     }
+
+    template <typename T>
+    ALTMIN_INLINE void update_codes(const T &dc) noexcept{
+        for (int n = 0; n < N; n++){
+            for (int c_out = 0; c_out < C_out; c_out++){
+                codes[n][c_out] -= (((1.0 + 0.9) * 0.3) * dc[n][c_out]);
+            }
+        }
+    }
+
+
+    template <typename T>
+    ALTMIN_INLINE void differentiate_layer(const T& inputs, const T& dL_dout) noexcept{
+     
+    
+
+        for (int c_out = 0; c_out < C_out; c_out++){
+            for (int c_in = 0; c_in < C_in; c_in++){
+                dWs[c_out][c_in].setZero();
+            }
+        }
+
+
+        for (int n = 0; n < N; n++){
+            for (int c_out = 0; c_out < C_out; c_out++){
+                //Bias only needs to be added once so do like this so its done during the first convolution so we don't have to iterate over the whole matrix again at the end.
+                for (int c_in = 0; c_in < C_in; c_in++){
+                    dWs[c_out][c_in] +=  differentiate_conv2d(inputs[n][c_in], dL_dout[n][c_out], kernels[0][0].rows(), kernels[0][0].cols(), true);
+                }
+            }
+        }
+
+        //bias
+
+        std::cout << "db conv2d " << std::endl; 
+        db.setZero();
+
+        std::cout << "Db before diff " << db << std::endl;
+
+        for (int n = 0; n < N; n++){
+            for (int c =0; c<C_out; c++){
+                db[c] += (dL_dout[n][c].sum());
+            }
+        }
+
+        std::cout << "Db after diff " << db << std::endl;
+
+            
+
+        //layer_dout
+
+    
+
+        std::cout << "dout conv2d " << std::endl; 
+
+        for (int n =0 ; n<N ; n++){
+            for(int c_in = 0; c_in < C_in; c_in++){
+
+            
+                Eigen::MatrixXd sum = differentiate_conv2d(dL_dout[n][0],kernels[0][c_in],  inputs[0][0].rows(), inputs[0][0].cols(), false);
+                for (int c_out =1; c_out < C_out; c_out++){
+                    sum += differentiate_conv2d(dL_dout[n][c_out],kernels[c_out][c_in],  inputs[0][0].rows(), inputs[0][0].cols(), false);
+                }
+                layer_douts[n][c_in] = sum;
+            }
+        }
+        
+
+
+    }
+
+
 };
 
 class ReluCNNLayer{
 public:
 
     std::vector<std::vector<Eigen::MatrixXd>> layer_outputs;
+    std::vector<std::vector<Eigen::MatrixXd>> layer_douts;
     int N;
     int C;
     int H;
@@ -390,6 +511,7 @@ public:
                 tmp.emplace_back(Eigen::MatrixXd(H,W));
             }
             layer_outputs.emplace_back(tmp);
+            layer_douts.emplace_back(tmp);
         } 
     };
     template <typename T>
@@ -400,11 +522,21 @@ public:
             }
         }   
     }
+
+    template <typename T>
+    ALTMIN_INLINE void differentiate_layer(const T& inputs) noexcept{
+        for (int n = 0; n < N; n++){
+            for (int c = 0; c < C; c++){
+                layer_douts[n][c] = differentiate_ReLU(inputs[n][c]);
+            }
+        }   
+    }
 };
 
 class MaxPool2dLayer{
 public: 
     std::vector<std::vector<Eigen::MatrixXd>> layer_outputs;
+    std::vector<std::vector<Eigen::MatrixXd>> layer_douts;
     int kernel_size;
     int stride;
     int N;
@@ -419,6 +551,7 @@ public:
                 tmp.emplace_back(Eigen::MatrixXd(H, W));
             }
             layer_outputs.emplace_back(tmp);
+            layer_douts.emplace_back(tmp);
         } 
     }
 
@@ -430,6 +563,15 @@ public:
                 layer_outputs[n][c] = maxpool2d(inputs[n][c], kernel_size, stride, H, W);
             }
         }      
+    }
+
+    template <typename T>
+    ALTMIN_INLINE void differentiate_layer(const T& inputs) noexcept{
+        for (int n = 0; n < N; n++){
+            for (int c = 0; c < C; c++){
+                layer_douts[n][c] = differentiate_maxpool2d(inputs[n][c], kernel_size, stride, H, W);
+            }
+        }   
     }
 };
 
@@ -445,11 +587,12 @@ public:
 
 template <typename T>
 struct CallForwardCNN {
-    void operator()(Conv2dLayer& conv2d) { conv2d.forward(inputs); }    
+    void operator()(Conv2dLayer& conv2d) { conv2d.forward(inputs, train); }    
     void operator()(ReluCNNLayer& relu_cnn) { relu_cnn.forward(inputs); }   
     void operator()(MaxPool2dLayer& maxpool2d) { maxpool2d.forward(inputs); }   
    // void operator()(FlattenLayer& flatten) { flatten.forward(inputs); }   
     const T& inputs;
+    const bool train = true;
 };
 
 struct CallGetCNNCodes {
@@ -460,8 +603,76 @@ struct CallGetCNNCodes {
     std::vector<std::vector<Eigen::MatrixXd>> operator()(MaxPool2dLayer& maxpool2d) {std::cout << "get codes called on maxpool2d layer\n";return maxpool2d.layer_outputs; }   
 };
 
+struct CallGetCNNWeights {
+    std::vector<std::vector<Eigen::MatrixXd>> operator()(Conv2dLayer& conv2d) { return conv2d.kernels; }    
+    //IDeally would be void but these functions are never called as the nn checks that the layer is linear before calling get codes
+    //Return layer output to make compiler happy but never actually gets called so no overhead
+    std::vector<std::vector<Eigen::MatrixXd>> operator()(ReluCNNLayer& relu_cnn) {  std::cout << "get get weights called on relu cnn layer\n"; return relu_cnn.layer_outputs;}   
+    std::vector<std::vector<Eigen::MatrixXd>> operator()(MaxPool2dLayer& maxpool2d) {std::cout << "get get weights called on maxpool2d layer\n";return maxpool2d.layer_outputs; }   
+};
+
+struct CallGetCNNBiases {
+    Eigen::VectorXd operator()(Conv2dLayer& conv2d) { return conv2d.bias; }    
+    //IDeally would be void but these functions are never called as the nn checks that the layer is linear before calling get codes
+    //Return layer output to make compiler happy but never actually gets called so no overhead
+    Eigen::VectorXd  operator()(ReluCNNLayer& relu_cnn) {  std::cout << "get bias called on relu cnn layer\n"; return Eigen::VectorXd(1);}   
+    Eigen::VectorXd  operator()(MaxPool2dLayer& maxpool2d) {std::cout << "get bias called on maxpool2d layer\n";return Eigen::VectorXd(1); }   
+};
+
+
+
+struct CallGetdW {
+    std::vector<std::vector<Eigen::MatrixXd>> operator()(Conv2dLayer& conv2d) { return conv2d.dWs; }    
+    //IDeally would be void but these functions are never called as the nn checks that the layer is linear before calling get codes
+    //Return layer output to make compiler happy but never actually gets called so no overhead
+    std::vector<std::vector<Eigen::MatrixXd>> operator()(ReluCNNLayer& relu_cnn) {  std::cout << "get dw called on relu cnn layer\n"; return relu_cnn.layer_outputs;}   
+    std::vector<std::vector<Eigen::MatrixXd>> operator()(MaxPool2dLayer& maxpool2d) {std::cout << "get dw called on maxpool2d layer\n";return maxpool2d.layer_outputs; }   
+};
+
+struct CallGetdb {
+    Eigen::VectorXd operator()(Conv2dLayer& conv2d) { return conv2d.db; }    
+    //IDeally would be void but these functions are never called as the nn checks that the layer is linear before calling get codes
+    //Return layer output to make compiler happy but never actually gets called so no overhead
+    Eigen::VectorXd  operator()(ReluCNNLayer& relu_cnn) {  std::cout << "get db called on relu cnn layer\n"; return Eigen::VectorXd(1);}   
+    Eigen::VectorXd  operator()(MaxPool2dLayer& maxpool2d) {std::cout << "get db called on maxpool2d layer\n";return Eigen::VectorXd(1); }   
+};
+
+
+struct CallGetStride {
+    int operator()(Conv2dLayer& conv2d) { std::cout << "get stride called on conv2d cnn layer\n"; return -1; }    
+    int operator()(ReluCNNLayer& relu_cnn) {  std::cout << "get stride called on relu cnn layer\n"; return -1;}   
+    int operator()(MaxPool2dLayer& maxpool2d) { return maxpool2d.stride; }   
+};
+
+template <typename T>
+struct CallCNNDifferentiateLayer {
+    void operator()(Conv2dLayer& conv2d) { conv2d.differentiate_layer(inputs, dL_douts); }    
+    void operator()(ReluCNNLayer& relu_cnn) { relu_cnn.differentiate_layer(inputs); }   
+    void operator()(MaxPool2dLayer& maxpool2d) { maxpool2d.differentiate_layer(inputs); }   
+    // void operator()(FlattenLayer& flatten) { flatten.forward(inputs); }   
+    const T& inputs;
+    const T& dL_douts;
+};
+
+template <typename T>
+struct CallCNNUpdateCodes {
+    void operator()(Conv2dLayer& conv2d) { conv2d.update_codes(dc); }    
+    void operator()(ReluCNNLayer& relu_cnn) { std::cout << "Update codes called for relu " << std::endl;}   
+    void operator()(MaxPool2dLayer& maxpool2d) { std::cout << "update codes called for maxpool2d " << std::endl; }   
+    // void operator()(FlattenLayer& flatten) { flatten.forward(inputs); }   
+    const T& dc;
+};
+
+struct CallAdamCNN {
+    void operator()(Conv2dLayer& conv2d) { conv2d.adam(); }    
+    void operator()(ReluCNNLayer& relu_cnn) { std::cout << "adam called called for relu " << std::endl;}   
+    void operator()(MaxPool2dLayer& maxpool2d) { std::cout << "adam called called for maxpool2d " << std::endl; }   
+};
+
+
 //std::vector<std::vector<Eigen::MatrixXd>>
 const auto&  get_layer_output_cnn = [](const auto& layer) {  return layer.layer_outputs;};
+const auto&  get_layer_douts_cnn = [](const auto& layer) {  return layer.layer_douts;};
 
 
 

@@ -140,11 +140,23 @@ ALTMIN_INLINE auto py_differentiate_sigmoid(const nanobind::DRef<Eigen::MatrixXd
 
 ALTMIN_INLINE auto py_differentiate_ReLU(const nanobind::DRef<Eigen::MatrixXd> &x) noexcept {return differentiate_ReLU(x);}
 
+ALTMIN_INLINE auto py_differentiate_maxpool2d(const nanobind::DRef<Eigen::MatrixXd> & inputs, const int kernel_size, const int stride, const int height, const int width) {
+    return differentiate_maxpool2d(inputs, kernel_size, stride, height, width);
+}
+
+ALTMIN_INLINE auto py_differentiate_conv2d(const nanobind::DRef<Eigen::MatrixXd> & inputs, const nanobind::DRef<Eigen::MatrixXd> & kernels, const int height, const int width, bool flag) {
+    return differentiate_conv2d(inputs, kernels,height, width, flag);
+}
+
+
 ALTMIN_INLINE auto py_differentiate_BCELoss(const nanobind::DRef<Eigen::MatrixXd> &output,
                                                     const nanobind::DRef<Eigen::MatrixXd> &target) noexcept {return differentiate_BCELoss(output, target);}
 
 ALTMIN_INLINE auto py_differentiate_MSELoss(const nanobind::DRef<Eigen::MatrixXd> &output,
                                                     const nanobind::DRef<Eigen::MatrixXd> &target) noexcept {return differentiate_MSELoss(output, target);}
+
+ALTMIN_INLINE auto py_differentiate_MSELoss4d(std::vector<std::vector<Eigen::MatrixXd>> output,
+                                                    std::vector<std::vector<Eigen::MatrixXd>> target) noexcept {return differentiate_MSELoss4d(output, target);}
 
 ALTMIN_INLINE auto py_differentiate_CrossEntropyLoss(const nanobind::DRef<Eigen::MatrixXd> &output,
                                                              const nanobind::DRef<Eigen::VectorXd> &target,
@@ -196,14 +208,31 @@ constexpr void addVarCNNDefs(T& nn) {
         .def("addReluCNNLayer", &V::addReluCNNLayer)
         // .def("addLinearLayer", &V::addLinearLayer)
         // .def("addLastLinearLayer", &V::addLastLinearLayer)
-        // .def("construct_pairs", &V::construct_pairs)
+        .def("construct_pairs", &V::construct_pairs)
         .def("get_codes_cnn", &V::get_codes_cnn)
-        // .def("update_codes", &V::update_codes)
+        .def("update_codes_cnn", &V::update_codes_cnn)
         // .def("update_weights_not_parallel", &V::update_weights_not_parallel)
         // .def("update_weights_parallel", &V::update_weights_parallel)
         .def("return_codes_cnn", &V::return_codes_cnn);
         // .def("return_weights", &V::return_weights)
         // .def("return_biases", &V::return_biases);
+}
+
+template <typename T, typename V>
+constexpr void addVarLeNetDefs(T& nn) {
+    nn.def(nanobind::init<>())
+        .def("AddCNN", &V::AddCNN)
+        .def("AddFeedForwardNN", &V::AddFeedForwardNN)
+        .def("GetCodesLeNet", &V::GetCodesLeNet)
+        .def("ReshapeGrad4d", &V::ReshapeGrad4d)
+        .def("ReturnCodesFromCNNLeNet", &V::ReturnCodesFromCNNLeNet)
+        .def("ReturnCodesFromFFLeNet", &V::ReturnCodesFromFFLeNet)
+        .def("ReturnWeightsFromFFLeNet", &V::ReturnWeightsFromFFLeNet)
+        .def("ReturnBiasesFromFFLeNet", &V::ReturnBiasesFromFFLeNet)
+        .def("ReturnWeightsFromCNNLeNet", &V::ReturnWeightsFromCNNLeNet)
+        .def("ReturnBiasesFromCNNLeNet", &V::ReturnBiasesFromCNNLeNet)
+        .def("UpdateCodesLeNet", &V::UpdateCodesLeNet)
+        .def("UpdateWeightsLeNet", &V::UpdateWeightsLeNet);
 }
 
 
@@ -218,6 +247,7 @@ NB_MODULE(fast_altmin, m) {
     m.def("differentiate_sigmoid", &py_differentiate_sigmoid);
     m.def("differentiate_BCELoss", &py_differentiate_BCELoss);
     m.def("differentiate_MSELoss", &py_differentiate_MSELoss);
+    m.def("differentiate_MSELoss4d", &py_differentiate_MSELoss4d);
     m.def("hello_world", &hello_world);
     m.def("hello_world_in", &hello_world_in);
     m.def("hello_world_out", &hello_world_out);
@@ -232,6 +262,8 @@ NB_MODULE(fast_altmin, m) {
     m.def("cross_entropy_loss", &py_cross_entropy_loss);
     m.def("differentiate_CrossEntropyLoss", &py_differentiate_CrossEntropyLoss);
     m.def("flatten", &py_flatten);
+    m.def("differentiate_maxpool2d", &py_differentiate_maxpool2d);
+    m.def("differentiate_conv2d", &py_differentiate_conv2d);
     //m.def("flatten", &flatten);
     //m.def("conv2d", &conv2d);
     //m.def("maxpool2d", &maxpool2d);
@@ -291,6 +323,14 @@ NB_MODULE(fast_altmin, m) {
 
     nanobind::class_<VariantCNN<loss_t::BCE>> cnnBCE(m, "VariantCNNBCE");
     addVarCNNDefs<nanobind::class_<VariantCNN<loss_t::BCE>>, VariantCNN<loss_t::BCE>>(cnnBCE);
+
+    nanobind::class_<VariantCNN<loss_t::CrossEntropy>> cnnCrossEntropy(m, "VariantCNNCrossEntropy");
+    addVarCNNDefs<nanobind::class_<VariantCNN<loss_t::CrossEntropy>>, VariantCNN<loss_t::CrossEntropy>>(cnnCrossEntropy);
+
+
+    nanobind::class_<LeNet<loss_t::CrossEntropy>> LeNetCrossEntropy(m, "LeNetCrossEntropy");
+    addVarLeNetDefs<nanobind::class_<LeNet<loss_t::CrossEntropy>>, LeNet<loss_t::CrossEntropy>>(LeNetCrossEntropy);
+
     // nanobind::class_<NeuralNetwork>(m, "NeuralNetwork")
     //     .def(nanobind::init<>())
     //     .def("addSigmoidLayer", &NeuralNetwork::addSigmoidLayer)
