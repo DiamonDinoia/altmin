@@ -64,10 +64,10 @@ Eigen::MatrixXd maxpool2d(const T &input, const int kernel_size, const int strid
     return res;
 }
 
-//Chnages to this and bce loss have made it worse
-ALTMIN_INLINE auto lin(const auto & input,
-                       const auto & weight,
-                       const auto & bias) noexcept {
+template <typename T, typename G, typename K>
+ALTMIN_INLINE auto lin(const T& input,
+                       const G& weight,
+                       const K& bias) noexcept {
     const auto n_threads = std::thread::hardware_concurrency();
     Eigen::setNbThreads(n_threads);
     Eigen::MatrixXd res = input * weight.transpose();
@@ -110,24 +110,6 @@ ALTMIN_INLINE double BCELoss(const T& predictions,
     }
     return tot / static_cast<double>(M);
 }
-
-// template <typename T>
-// ALTMIN_INLINE double BCELoss(const T& predictions,
-//                              const T& targets) noexcept {
-//     const auto N = predictions.rows();
-//     const auto M = predictions.cols();
-//     double tot   = 0.0;
-//     for (long i = 0; i < N; ++i) {
-//         double sum = 0.0;
-//         for (long j = 0; j < M; ++j) {
-//             sum += (targets(i,j) * std::log(predictions(i,j))) +
-//                    ((1.0 - targets(i,j)) * std::log(1.0 - predictions(i,j)));
-//         }
-//         sum *= (-1.0 / static_cast<double>(M));
-//         tot += sum;
-//     }
-//     return tot / static_cast<double>(N);
-// }
 
 template <typename T>
 ALTMIN_INLINE double MSELoss(const T& predictions,
@@ -195,9 +177,10 @@ ALTMIN_INLINE double cross_entropy_loss(const T& input,
 
 template <typename T>
 ALTMIN_INLINE auto differentiate_sigmoid(T &x) noexcept {
-    const auto ones = Eigen::MatrixXd::Constant(x.rows(), x.cols(), 1.0);
+    const Eigen::MatrixXd ones = Eigen::MatrixXd::Constant(x.rows(), x.cols(), 1.0);
     auto res = sigmoid(x);
-    return res.cwiseProduct(ones - res);
+    res.array()*=(ones-res).array();
+    return res;
 }
 
 template <typename T>

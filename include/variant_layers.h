@@ -36,7 +36,7 @@ class Adam {
             bias_v_t_correct(Eigen::VectorXd::Zero(n)){const auto n_threads = std::thread::hardware_concurrency();
             Eigen::setNbThreads(n_threads);}
 
-    template <bool init_vals, typename T, typename G>
+    template <bool init_vals, bool update_bias, typename T, typename G>
     ALTMIN_INLINE void adam(Eigen::MatrixXd& weight, Eigen::VectorXd& bias, const T& grad_weight,
                             const G& grad_bias) noexcept {
        
@@ -56,24 +56,28 @@ class Adam {
         
         weight -= learning_rate * (weight_m_t_correct.cwiseQuotient((weight_v_t_correct.cwiseSqrt().array() + eps).matrix()));
 
+        step += 1;
+
         // Update bias
-        if constexpr(init_vals){
-            bias_m = (1 - beta_1) * grad_bias;
-            bias_v = (1 - beta_2) * (grad_bias.cwiseProduct(grad_bias));
-        } else {
-            bias_m = beta_1 * bias_m + (1 - beta_1) * grad_bias;
-            bias_v = beta_2 * bias_v + (1 - beta_2) * (grad_bias.cwiseProduct(grad_bias));
+        if constexpr(update_bias){
+            if constexpr(init_vals){
+                bias_m = (1 - beta_1) * grad_bias;
+                bias_v = (1 - beta_2) * (grad_bias.cwiseProduct(grad_bias));
+            } else {
+                bias_m = beta_1 * bias_m + (1 - beta_1) * grad_bias;
+                bias_v = beta_2 * bias_v + (1 - beta_2) * (grad_bias.cwiseProduct(grad_bias));
+            }
+
+    
+            bias_m_t_correct = bias_m / (1.0 - std::pow(beta_1, static_cast<double>(bias_step)));
+            bias_v_t_correct = bias_v / (1.0 - std::pow(beta_2, static_cast<double>(bias_step)));
+    
+            
+
+            bias -= learning_rate * (bias_m_t_correct.cwiseQuotient((bias_v_t_correct.cwiseSqrt().array() + eps).matrix()));
+            bias_step += 1;
         }
-
-   
-        bias_m_t_correct = bias_m / (1.0 - std::pow(beta_1, static_cast<double>(step)));
-        bias_v_t_correct = bias_v / (1.0 - std::pow(beta_2, static_cast<double>(step)));
-   
         
-
-        bias -= learning_rate * (bias_m_t_correct.cwiseQuotient((bias_v_t_correct.cwiseSqrt().array() + eps).matrix()));
-
-        step = step + 1;
     }
    private:
     // See https://pytorch.org/docs/stable/generated/torch.optim.Adam.html for
@@ -94,6 +98,7 @@ class Adam {
     float beta_2;
     float eps;
     int step = 1;
+    int bias_step = 1;
 };
 
 enum layer_type {
@@ -153,9 +158,9 @@ public:
     template <typename T, typename G>
     ALTMIN_INLINE void adam(const T& grad_weight, const G& grad_bias) noexcept {
         if (init_vals){
-            adam_optimiser.template adam<true>(weight, bias, grad_weight, grad_bias);
+            adam_optimiser.template adam<true, true>(weight, bias, grad_weight, grad_bias);
         }else{
-            adam_optimiser.template adam<false>(weight, bias, grad_weight, grad_bias);
+            adam_optimiser.template adam<false, true>(weight, bias, grad_weight, grad_bias);
         }
         init_vals=false;
     }
@@ -189,9 +194,9 @@ public:
     ALTMIN_INLINE void adam(const T& grad_weight, const G& grad_bias) noexcept {
 
         if (init_vals){
-            adam_optimiser.template adam<true>(weight, bias, grad_weight, grad_bias);
+            adam_optimiser.template adam<true, true>(weight, bias, grad_weight, grad_bias);
         }else{
-            adam_optimiser.template adam<false>(weight, bias, grad_weight, grad_bias);
+            adam_optimiser.template adam<false,true >(weight, bias, grad_weight, grad_bias);
         }
         
         init_vals = false;
@@ -378,25 +383,36 @@ public:
 
     //bias deffo wrong updated c_out to many times for each bias. Kinda not easy to fix. 
     ALTMIN_INLINE void adam() noexcept {
-        std::cout << "adam called for conv2d " << kernels[C_out-1][C_in-1] << std::endl;
-        std::cout << "grad bias type " << db << std::endl;
+
+        
+
         if (init_vals){
+            adam_optimisers[0][0].template adam<true,true>(kernels[0][0], bias, dWs[0][0], db);
             for (int c_out = 0; c_out < C_out; c_out++){
                 for (int c_in = 0; c_in < C_in; c_in++){
-
-                    adam_optimisers[c_out][c_in].template adam<true>(kernels[c_out][c_in], bias, dWs[c_out][c_in], db);
-                    //db only needs to be done Cour times
-                    db.setZero(db.size());
+                    if ((c_out + c_in) == 0){
+                        continue;
+                    }else{
+                        adam_optimisers[c_out][c_in].template adam<true,false>(kernels[c_out][c_in], bias, dWs[c_out][c_in], db);
+                    }
+                    
                 }
        
             }
             
         }else{
+            //update bias omce
+            adam_optimisers[0][0].template adam<false,true>(kernels[0][0], bias, dWs[0][0], db);
             for (int c_out = 0; c_out < C_out; c_out++){
                 for (int c_in = 0; c_in < C_in; c_in++){
-                    adam_optimisers[c_out][c_in].template adam<false>(kernels[c_out][c_in], bias, dWs[c_out][c_in], db);
+                    if ((c_out + c_in) == 0){
+                        continue;
+                    }else{
+                        adam_optimisers[c_out][c_in].template adam<false,false>(kernels[c_out][c_in], bias, dWs[c_out][c_in], db);
+                    }
                 }
             }
+            
         }
         init_vals=false;
     }
@@ -455,10 +471,10 @@ public:
 
         //bias
 
-        std::cout << "db conv2d " << std::endl; 
+
         db.setZero();
 
-        std::cout << "Db before diff " << db << std::endl;
+
 
         for (int n = 0; n < N; n++){
             for (int c =0; c<C_out; c++){
@@ -466,7 +482,7 @@ public:
             }
         }
 
-        std::cout << "Db after diff " << db << std::endl;
+
 
             
 
@@ -474,7 +490,7 @@ public:
 
     
 
-        std::cout << "dout conv2d " << std::endl; 
+
 
         for (int n =0 ; n<N ; n++){
             for(int c_in = 0; c_in < C_in; c_in++){

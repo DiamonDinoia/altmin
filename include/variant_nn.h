@@ -444,7 +444,6 @@ ALTMIN_INLINE void update_codes_cnn(std::vector<std::vector<Eigen::MatrixXd>> gr
             auto indexes = weight_pairs[x];
             const int start_idx = std::get<0>(indexes);
             const int end_idx = std::get<1>(indexes);
-            std::cout << "Start " << start_idx << " " << end_idx << std::endl;
             //first layer
             if (x == 0) {
                 update_weights_cnn<true>(inputs, std::visit(CallGetCNNCodes{}, layers[end_idx]), start_idx, end_idx);
@@ -489,44 +488,7 @@ ALTMIN_INLINE void update_codes_cnn(std::vector<std::vector<Eigen::MatrixXd>> gr
 
     }
 
-    // template <typename T, typename G>
-    // ALTMIN_INLINE void update_last_weights(T& inputs,const G& targets, const int start_idx, const int layer_idx) noexcept {
-    //     const int end_idx = layers.size()-1;
-    //     std::visit(CallForward<decltype(inputs)>{inputs, false}, layers[start_idx]);
-
-    //     for (int idx = start_idx+1; idx <= end_idx; idx++){
-    //         Eigen::MatrixXd in = std::visit(get_layer_output, layers[idx-1]);
-    //         std::visit(CallForward<decltype(in)>{in, false}, layers[idx]);
-    //         //layers[idx]->forward(layers[idx-1]->layer_output, false);
-    //     }
-
-    //     Eigen::MatrixXd dout;
-    //     if constexpr(loss == loss_t::BCE) { dout = differentiate_BCELoss(std::visit(get_layer_output, layers[end_idx]), targets);}
-    //     else if constexpr(loss == loss_t::MSE) {dout = differentiate_MSELoss(std::visit(get_layer_output, layers[end_idx]), targets);}
-    //     else if constexpr(loss == loss_t::CrossEntropy) {
-    //         auto class_labels = Eigen::VectorXd{targets.reshaped()};
-    //         // dout = differentiate_CrossEntropyLoss(layers[end_idx]->layer_output, class_labels,
-    //         //                                         static_cast<int>(layers[end_idx]->layer_output.cols()));}
-    //         Eigen::MatrixXd inputs = std::visit(get_layer_output, layers[end_idx]);
-    //         dout = (1/0.003) * 
-    //             differentiate_CrossEntropyLoss(inputs, class_labels, static_cast<int>(inputs.cols()));
-    //     }
-        
-    //     for (int idx = end_idx; idx > layer_idx; idx--){
-    //         // layers[idx]->differentiate_layer(layers[idx-1]->layer_output);
-    //         // dout.array() *= layers[end_idx]->dout.array();
-    //         Eigen::MatrixXd inputs = std::visit(get_layer_output, layers[idx-1]);
-    //         std::visit(CallDifferentiateLayer<decltype(inputs)>{inputs}, layers[idx]);
-    //         //should be idx but both work
-    //         dout.array() *= std::visit(CallGetDout{}, layers[end_idx]).array();
-    //     }
-        
-    //     Eigen::MatrixXd dW = dout.transpose() *  std::visit(get_layer_output, layers[layer_idx-1]);
-    //     Eigen::VectorXd db = dout.colwise().sum();
-    //     std::visit(CallAdam<decltype(dW), decltype(db)>{dW,db}, layers[layer_idx]);
-    // }
-
-
+   
 };
 
 
@@ -535,7 +497,11 @@ class LeNet{
 public:
     VariantNeuralNetwork<loss> feed_forward_nn;
     VariantCNN<loss> cnn;
-    LeNet(){
+    int batch_size;
+    // needed to respahe grad
+    int C_out;
+    int matrix_size;
+    LeNet(int batch_size, int C_out, int matrix_size): batch_size(batch_size), C_out(C_out), matrix_size(matrix_size){
         const auto n_threads = std::thread::hardware_concurrency();
         Eigen::setNbThreads(n_threads);
         
@@ -555,13 +521,12 @@ public:
         return res;
     }
 
-    std::vector<std::vector<Eigen::MatrixXd>> ReshapeGrad4d(Eigen::MatrixXd grad, int dim_0, int dim_1, int dim_2) noexcept {
-
+    std::vector<std::vector<Eigen::MatrixXd>> ReshapeGrad4d(Eigen::MatrixXd& grad) noexcept {
         std::vector<std::vector<Eigen::MatrixXd>> res;
-        for (int n =0; n < dim_0; n++){
+        for (int n =0; n < batch_size; n++){
             std::vector<Eigen::MatrixXd> tmp;
-            for (int i=0; i < dim_1; i++){
-                tmp.emplace_back(grad.block(n,i*dim_2*dim_2,1,dim_2*dim_2).reshaped<Eigen::RowMajor>(dim_2,dim_2));
+            for (int i=0; i < C_out; i++){
+                tmp.emplace_back(grad.block(n,i*matrix_size*matrix_size,1,matrix_size*matrix_size).reshaped<Eigen::RowMajor>(matrix_size, matrix_size));
             } 
             res.emplace_back(tmp);
         }
@@ -596,7 +561,8 @@ public:
     ALTMIN_INLINE void UpdateCodesLeNet(const nanobind::DRef<Eigen::MatrixXd> &targets) noexcept {
         Eigen::MatrixXd dc = feed_forward_nn.update_codes(targets);
         //Conver dc to 4d 
-        cnn.update_codes_cnn(ReshapeGrad4d(dc, 5, 16, 4));
+        //needs to not be hardcoded at some point
+        cnn.update_codes_cnn(ReshapeGrad4d(dc));
     }
 
     ALTMIN_INLINE void UpdateWeightsLeNet(std::vector<std::vector<Eigen::MatrixXd>> data_nb,

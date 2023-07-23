@@ -36,10 +36,4 @@
 #install(DIRECTORY ${altmin_SOURCE_DIR}/ DESTINATION ${CMAKE_SOURCE_DIR}/artifacts/altmin)
 # install(FILES ${CMAKE_SOURCE_DIR}/src/control_flow.py DESTINATION ${CMAKE_SOURCE_DIR}/artifacts)
 
-add_executable(eigen-test eigen-performance.cpp)
-target_link_libraries(eigen-test PRIVATE Eigen )
-target_add_compilation_flags(eigen-test)
 
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(eigen-test PRIVATE OpenMP::OpenMP_CXX)
-endif()
