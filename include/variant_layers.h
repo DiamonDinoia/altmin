@@ -128,13 +128,14 @@ public:
     Eigen::MatrixXd weight;
     Eigen::VectorXd bias;
     Eigen::MatrixXd codes;
-    double learning_rate;
+    double weights_learning_rate;
+    double codes_learning_rate;
     Adam adam_optimiser;
     bool init_vals = true;
 
-    LinearLayer(const int batchSize, Eigen::MatrixXd weight, Eigen::VectorXd bias, const double learning_rate) :
-        Layer(layer_type::LINEAR, weight.rows(), batchSize), weight(weight), bias(bias), codes(batch_size,weight.cols()), learning_rate(learning_rate), 
-        adam_optimiser(weight.rows(), weight.cols(), learning_rate) {}
+    LinearLayer(const int batchSize, Eigen::MatrixXd weight, Eigen::VectorXd bias, const double weights_learning_rate, const double codes_learning_rate):
+        Layer(layer_type::LINEAR, weight.rows(), batchSize), weight(weight), bias(bias), codes(batch_size,weight.cols()),  weights_learning_rate(weights_learning_rate), codes_learning_rate(codes_learning_rate), 
+        adam_optimiser(weight.rows(), weight.cols(), weights_learning_rate) {}
 
     template <typename T>
     ALTMIN_INLINE void forward(const T& inputs, const bool store_codes) noexcept{
@@ -147,7 +148,7 @@ public:
    
     template <typename T>
     ALTMIN_INLINE void update_codes(const T &dc) noexcept{
-        codes -= (((1.0 + 0.9) * 0.3) * dc);
+        codes -= (((1.0 + 0.9) * codes_learning_rate) * dc);
     }
 
     ALTMIN_INLINE void set_codes(const nanobind::DRef<Eigen::MatrixXd> &codes) noexcept{
@@ -313,26 +314,6 @@ struct CallGetDout {
 };
 
 std::vector<std::variant<LinearLayer, LastLinearLayer, ReluLayer, SigmoidLayer>> variant_vec;
-// variant_vec.emplace_back(LinearLayer{});
-// variant_vec.emplace_back(ReLULayer{});
-// // variant_vec.emplace_back(One{});
-// Eigen::MatrixXd a;
-// Eigen::MatrixXd b = Eigen::Ones(2,2);
-// for (auto &var: variant_vec){
-
-//     std::cout << std::visit(CallForward<decltype(b)>{b}, var) << std::endl;
-
-// }
-
-//  ALTMIN_INLINE virtual void forward(const Eigen::Ref<Eigen::MatrixXd>& inputs, bool store_codes) noexcept =0;
-//     ALTMIN_INLINE virtual void differentiate_layer(const Eigen::Ref<Eigen::MatrixXd>& inputs)noexcept {std::cout << "diff layer called bad " << std::endl;}
-//     ALTMIN_INLINE virtual void update_codes(const Eigen::MatrixXd &dc)noexcept {}
-//     ALTMIN_INLINE virtual Eigen::MatrixXd& get_codes()noexcept {std::cout << "get_codes called bad " << std::endl;}
-//     ALTMIN_INLINE virtual Eigen::MatrixXd& get_weight()noexcept {std::cout << "get weights called bad " << std::endl;}
-//     ALTMIN_INLINE virtual Eigen::VectorXd& get_bias()noexcept {std::cout << "get weights called bad " << std::endl;}
-//     ALTMIN_INLINE virtual void set_codes(const nanobind::DRef<Eigen::MatrixXd> &codes)noexcept {};
-//     ALTMIN_INLINE virtual void adam(const Eigen::Ref<Eigen::MatrixXd>& grad_weight, const Eigen::Ref<Eigen::VectorXd>& grad_bias)noexcept {std::cout << "adam called bad " << std::endl;}
-
 
 
 //Need to init layer outputs properly 
@@ -421,7 +402,7 @@ public:
     //works for one channel in atm
     template <typename T>
     ALTMIN_INLINE void forward(const T& inputs, const bool train) noexcept{
-        for (int n = 0; n < N; n++){
+        for (int n = 0; n < inputs.size(); n++){
             for (int c_out = 0; c_out < C_out; c_out++){
                 Eigen::MatrixXd sum = Eigen::MatrixXd::Zero(H,W);
                 //Bias only needs to be added once so do like this so its done during the first convolution so we don't have to iterate over the whole matrix again at the end.
@@ -532,7 +513,7 @@ public:
     };
     template <typename T>
     ALTMIN_INLINE void forward(const T& inputs) noexcept{
-        for (int n = 0; n < N; n++){
+        for (int n = 0; n < inputs.size(); n++){
             for (int c = 0; c < C; c++){
                 layer_outputs[n][c] = ReLU(inputs[n][c]);
             }
@@ -574,7 +555,7 @@ public:
     //works for one channel in atm
     template <typename T>
     ALTMIN_INLINE void forward(const T& inputs) noexcept{
-        for (int n = 0; n < N; n++){
+        for (int n = 0; n < inputs.size(); n++){
             for (int c = 0; c < C; c++){
                 layer_outputs[n][c] = maxpool2d(inputs[n][c], kernel_size, stride, H, W);
             }

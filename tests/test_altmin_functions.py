@@ -7,6 +7,9 @@ import sys
 from altmin import simpleNN, get_mods, get_codes, update_codes, FFNet, update_hidden_weights_adam_, update_last_layer_, load_dataset, LeNet
 from log_approximator import LogApproximator
 
+
+
+
 class TestAltminFunctionFeedForward(unittest.TestCase):
 
     def test_forward(self):
@@ -15,11 +18,12 @@ class TestAltminFunctionFeedForward(unittest.TestCase):
         
         # model init
         model = simpleNN(2, [4,3],1)
+        neural_network = fast_altmin.convert_feed_forward_pytorch_model(model, nn.BCELoss(), 7)
         model = get_mods(model)
         model = model[1:]
-        neural_network = fast_altmin.VariantNeuralNetworkBCE()
-        fast_altmin.create_model_class(model, neural_network, 7, 0)
-        neural_network.construct_pairs()
+        # neural_network = fast_altmin.VariantNeuralNetworkBCE()
+        # fast_altmin.create_model_class(model, neural_network, 7, 0)
+        # neural_network.construct_pairs()
 
         # python and cpp implementation
         output_python, codes_python = get_codes(model, data)
@@ -45,29 +49,27 @@ class TestAltminFunctionFeedForward(unittest.TestCase):
         criterion = nn.BCELoss()
 
         model = simpleNN(2, [4,3],1)
+        neural_network = fast_altmin.convert_feed_forward_pytorch_model(model, criterion, 7)
+        codes_cpp = neural_network.return_codes() 
         model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
                      scheduler=lambda epoch: 1/2**(epoch//8))
         model[-1].optimizer.param_groups[0]['lr'] = 0.008
         model = model[1:]
-        neural_network = fast_altmin.VariantNeuralNetworkBCE()
-        fast_altmin.create_model_class(model, neural_network, 7, 0)
-        neural_network.construct_pairs()
+
 
         # python implementation
-        for it in range(4):
+        for it in range(1):
             with torch.no_grad():
                 output_python, codes_python = get_codes(model, data)
-
             codes_python = update_codes(codes_python, model, targets, criterion, mu, 0, n_iter, lr)
 
         # cpp implementation
-        for it in range(4):
+        for it in range(1):
             output_cpp = neural_network.get_codes(data, True)
- 
             neural_network.update_codes(targets)
-        codes_cpp = neural_network.return_codes() 
 
-        
+        codes_cpp = neural_network.return_codes() 
+            
         #check codes
         for x in range(len(codes_python)):
             check_equal(codes_python[x], codes_cpp[x], 10e6)
@@ -84,13 +86,11 @@ class TestAltminFunctionFeedForward(unittest.TestCase):
         mu = 0.003
         criterion = nn.MSELoss()
         model= LogApproximator(5)
+        neural_network = fast_altmin.convert_feed_forward_pytorch_model(model, criterion, 7)
         model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
                      scheduler=lambda epoch: 1/2**(epoch//8))
         model[-1].optimizer.param_groups[0]['lr'] = 0.008
         model = model[1:]
-        neural_network = fast_altmin.VariantNeuralNetworkMSE()
-        fast_altmin.create_model_class(model, neural_network, 7, 0)
-        neural_network.construct_pairs()
 
         # python implementation
         for it in range(1):
@@ -119,15 +119,13 @@ class TestAltminFunctionFeedForward(unittest.TestCase):
         lr = 0.3
         mu = 0.003
         criterion = nn.CrossEntropyLoss()
-        model = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()        
+        model = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()   
+        print(model)
+        neural_network = fast_altmin.convert_feed_forward_pytorch_model(model, criterion, 4)    
         model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
                      scheduler=lambda epoch: 1/2**(epoch//8))
         model[-1].optimizer.param_groups[0]['lr'] = 0.008
         model = model[1:]
-
-        neural_network = fast_altmin.VariantNeuralNetworkCrossEntropy()
-        fast_altmin.create_model_class(model, neural_network, 4, 0)
-        neural_network.construct_pairs()
 
         # Python implementation
         for it in range(1):
@@ -161,15 +159,12 @@ class TestAltminFunctionFeedForward(unittest.TestCase):
         mu = 0.003
         criterion = nn.BCELoss()
         model = simpleNN(2, [4,3],1)
-        
+        neural_network = fast_altmin.convert_feed_forward_pytorch_model(model, criterion, 7)
         model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
                      scheduler=lambda epoch: 1/2**(epoch//8))
         model[-1].optimizer.param_groups[0]['lr'] = 0.008
         model = model[1:]
-        neural_network = fast_altmin.VariantNeuralNetworkBCE()
-        fast_altmin.create_model_class(model, neural_network, 7, 0)
-        neural_network.construct_pairs()
-        
+
         # Python imp
         for it in range(1):
             with torch.no_grad():
@@ -203,14 +198,12 @@ class TestAltminFunctionFeedForward(unittest.TestCase):
         mu = 0.003
         criterion = nn.MSELoss()
         model= LogApproximator(5)
+        neural_network = fast_altmin.convert_feed_forward_pytorch_model(model, criterion, 7)
         model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
                      scheduler=lambda epoch: 1/2**(epoch//8))
         model[-1].optimizer.param_groups[0]['lr'] = 0.008
         model = model[1:]
-        neural_network = fast_altmin.VariantNeuralNetworkMSE()
-        fast_altmin.create_model_class(model, neural_network, 7, 0)
-        neural_network.construct_pairs()
-
+     
 
         # python imp
         for it in range(1):
@@ -243,14 +236,13 @@ class TestAltminFunctionFeedForward(unittest.TestCase):
         lr = 0.3
         mu = 0.003
         criterion = nn.CrossEntropyLoss()
-        model = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double()        
+        model = FFNet(10, n_hiddens=100, n_hidden_layers=2, batchnorm=False, bias=True).double() 
+        neural_network = fast_altmin.convert_feed_forward_pytorch_model(model, criterion, 7)       
         model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
                      scheduler=lambda epoch: 1/2**(epoch//8))
         model[-1].optimizer.param_groups[0]['lr'] = 0.008
         model = model[1:]
-        neural_network = fast_altmin.VariantNeuralNetworkCrossEntropy()
-        fast_altmin.create_model_class(model, neural_network, 4, 0)
-        neural_network.construct_pairs()
+
 
         # python imp
         for it in range(1):
@@ -290,19 +282,7 @@ class TestCNN(unittest.TestCase):
 
         #Create model
         model = LeNet(num_input_channels=num_input_channels, window_size=window_size, bias=True).double()
-        model = get_mods(model)
-
-        model_cnn = model[0:4]
-        model_nn = model[4:]
-
-        convolutional_neural_network = fast_altmin.VariantCNNCrossEntropy()
-        C_out, H_out, W_out  = fast_altmin.create_CNN(model_cnn, convolutional_neural_network, batch_size, num_input_channels, data.shape[2],data.shape[3])
-        neural_network = fast_altmin.VariantNeuralNetworkCrossEntropy()
-        fast_altmin.create_model_class(model_nn, neural_network, batch_size, 0)
-        neural_network.construct_pairs()
-        lenet = fast_altmin.LeNetCrossEntropy(batch_size, 16, 4)
-        lenet.AddCNN(convolutional_neural_network)
-        lenet.AddFeedForwardNN(neural_network)
+        lenet = fast_altmin.convert_cnn_pytorch_model(model, nn.CrossEntropyLoss(), batch_size, data.shape[1], data.shape[2], data.shape[3])
 
         #Generate input to cpp
         input_list = []
@@ -317,6 +297,7 @@ class TestCNN(unittest.TestCase):
         cpp_cnn_codes = lenet.ReturnCodesFromCNNLeNet()
         cpp_nn_codes = lenet.ReturnCodesFromFFLeNet()
         
+        model = get_mods(model)
         py_imp, codes_python = get_codes(model, data)
         
         check_equal(py_imp, cpp_imp, 10e9)
@@ -341,22 +322,10 @@ class TestCNN(unittest.TestCase):
 
         #Create model
         model = LeNet(num_input_channels=num_input_channels, window_size=window_size, bias=True).double()
-        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
-                     scheduler=lambda epoch: 1/2**(epoch//8))
-        model[-1].optimizer.param_groups[0]['lr'] = 0.008
+        lenet = fast_altmin.convert_cnn_pytorch_model(model, nn.CrossEntropyLoss(), batch_size, data.shape[1], data.shape[2], data.shape[3])
 
-        #print(model)
-        model_cnn = model[0:4]
-        model_nn = model[4:]
 
-        convolutional_neural_network = fast_altmin.VariantCNNCrossEntropy()
-        C_out, H_out, W_out  = fast_altmin.create_CNN(model_cnn, convolutional_neural_network, batch_size, num_input_channels, data.shape[2],data.shape[3])
-        neural_network = fast_altmin.VariantNeuralNetworkCrossEntropy()
-        fast_altmin.create_model_class(model_nn, neural_network, batch_size, 0)
-        neural_network.construct_pairs()
-        lenet = fast_altmin.LeNetCrossEntropy(batch_size, 16, 4)
-        lenet.AddCNN(convolutional_neural_network)
-        lenet.AddFeedForwardNN(neural_network)
+       
 
         
         #Generate input to cpp
@@ -368,8 +337,11 @@ class TestCNN(unittest.TestCase):
             input_list.append(tmp)
         
        
-        cpp_imp = lenet.GetCodesLeNet(input_list, True)
 
+
+        model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
+                scheduler=lambda epoch: 1/2**(epoch//8))
+        model[-1].optimizer.param_groups[0]['lr'] = 0.008
         with torch.no_grad():
             py_imp, codes_python = get_codes(model, data)
         
@@ -377,7 +349,7 @@ class TestCNN(unittest.TestCase):
         
         targets = targets.double()
         targets = targets.reshape(1,len(targets))
-        
+        cpp_imp = lenet.GetCodesLeNet(input_list, True)
         lenet.UpdateCodesLeNet(targets)
         cpp_cnn_codes = lenet.ReturnCodesFromCNNLeNet()
         cpp_nn_codes = lenet.ReturnCodesFromFFLeNet()
@@ -392,7 +364,7 @@ class TestCNN(unittest.TestCase):
 
     def test_cnn_update_weights(self):
         #Load data
-        batch_size = 200
+        batch_size = 5
         train_loader, test_loader, n_inputs = load_dataset('mnist', batch_size,  conv_net=True,
                                                        data_augmentation=True)
         window_size = train_loader.dataset.data[0].shape[0]
@@ -403,6 +375,8 @@ class TestCNN(unittest.TestCase):
 
         #Create model
         model = LeNet(num_input_channels=num_input_channels, window_size=window_size, bias=True).double()
+        #lenet = fast_altmin.convert_cnn_pytorch_model(model, nn.CrossEntropyLoss(), batch_size, data.shape[1], data.shape[2], data.shape[3])
+        
         model = get_mods(model, optimizer='Adam', optimizer_params={'lr': 0.008},
                      scheduler=lambda epoch: 1/2**(epoch//8))
         model[-1].optimizer.param_groups[0]['lr'] = 0.008

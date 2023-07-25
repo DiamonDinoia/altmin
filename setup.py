@@ -26,11 +26,12 @@ setup(
     cmake_install_dir="src/fast_altmin",
     include_package_data=True,
     python_requires=">=3.7",
+    install_requires = [
+       'altmin@git+https://github.com/DiamonDinoia/online-alt-min'
+    ]
+    
     
     
 )
 
-# install_requires = [
-#        'altmin@git+https://github.com/DiamonDinoia/online-alt-min'
-#     ]
-    
+

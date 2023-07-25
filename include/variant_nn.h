@@ -42,8 +42,8 @@ public:
     
 
     ALTMIN_INLINE void addLinearLayer(const int batch_size, const nanobind::DRef<Eigen::MatrixXd>& weight,
-        const nanobind::DRef<Eigen::VectorXd>& bias, const double learning_rate) noexcept {
-            layers.emplace_back(LinearLayer{batch_size, weight, bias, learning_rate});
+        const nanobind::DRef<Eigen::VectorXd>& bias, const double learning_rate_weights, const double learning_rate_codes) noexcept {
+            layers.emplace_back(LinearLayer{batch_size, weight, bias, learning_rate_weights, learning_rate_codes});
     }
 
     ALTMIN_INLINE void addLastLinearLayer(const int batch_size, const nanobind::DRef<Eigen::MatrixXd>& weight,
@@ -348,8 +348,26 @@ public:
         return biases;
     }
 
+    //need to handel case where test data batch size is different than training size
+    std::vector<std::vector<Eigen::MatrixXd>> slicing(std::vector<std::vector<Eigen::MatrixXd>>& arr,
+                    int X, int Y)
+    {
+    
+        // Starting and Ending iterators
+        auto start = arr.begin() + X;
+        auto end = arr.begin() + Y;
+    
+        // To store the sliced vector
+        std::vector<std::vector<Eigen::MatrixXd>> result(Y - X);
+    
+        // Copy vector using copy function()
+        copy(start, end, result.begin());
+    
+        // Return the final sliced vector
+        return result;
+    }
 
-    ALTMIN_INLINE Eigen::MatrixXd get_codes_cnn(const std::vector<std::vector<Eigen::MatrixXd>> &inputs, const bool training_mode) noexcept {
+    ALTMIN_INLINE Eigen::MatrixXd get_codes_cnn(const std::vector<std::vector<Eigen::MatrixXd>> &inputs, const bool training_mode, const int batch_size) noexcept {
         std::visit(CallForwardCNN<decltype(inputs)>{inputs, training_mode}, layers[0]);
         for (int x = 1; x < layers.size();x++){
             std::vector<std::vector<Eigen::MatrixXd>> in = std::visit(get_layer_output_cnn, layers[x-1]);
@@ -357,6 +375,10 @@ public:
         }
         //std::vector<std::vector<Eigen::MatrixXd>> res = std::visit(get_layer_output_cnn, layers[0]);
         std::vector<std::vector<Eigen::MatrixXd>> out = std::visit(get_layer_output_cnn, layers[layers.size()-1]);
+
+        if (inputs.size() != batch_size){
+            out = slicing(out, 0, inputs.size());
+        }
         return flatten(out);
       
     }
@@ -516,7 +538,7 @@ public:
     }
 
     ALTMIN_INLINE Eigen::MatrixXd GetCodesLeNet(std::vector<std::vector<Eigen::MatrixXd>> inputs, const bool training_mode) noexcept {
-        Eigen::MatrixXd res = cnn.get_codes_cnn(inputs, training_mode);
+        Eigen::MatrixXd res = cnn.get_codes_cnn(inputs, training_mode, batch_size);
         res = feed_forward_nn.get_codes(res, training_mode);
         return res;
     }

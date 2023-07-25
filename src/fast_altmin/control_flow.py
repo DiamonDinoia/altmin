@@ -3,11 +3,11 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-from altmin import Flatten
+from altmin import Flatten, get_mods
 import fast_altmin
 import unittest
 
-def create_model_class(model, neural_network, batch_size, n, last_layer = False, lr=0.008):
+def create_model_class(model, neural_network, batch_size, n, lr=0.008, lr_codes = 0.3,  last_layer = False):
     for mod in model:
         #print(mod)
         if isinstance(mod, nn.ReLU):
@@ -17,11 +17,11 @@ def create_model_class(model, neural_network, batch_size, n, last_layer = False,
             if last_layer:
                 neural_network.addLastLinearLayer(batch_size, mod.weight.data, mod.bias.data, lr)
             else:
-                neural_network.addLinearLayer(batch_size, mod.weight.data, mod.bias.data, lr)
+                neural_network.addLinearLayer(batch_size, mod.weight.data, mod.bias.data, lr, lr_codes)
         elif isinstance(mod, nn.Sigmoid):
             neural_network.addSigmoidLayer(n, batch_size)
         elif isinstance(mod, nn.Sequential):
-            create_model_class(mod, neural_network, batch_size, n, True, lr)
+            create_model_class(mod, neural_network, batch_size, n,  lr, lr_codes, True)
         else:
             print("layer not imp yet")
 
@@ -60,4 +60,53 @@ def create_CNN(model, neural_network, N, C, H, W):
 
 
 
+def convert_feed_forward_pytorch_model(model, criterion, batch_size, lr_weights=0.008, lr_codes=0.3, file_path = "-1"):
+    model = model.double()
+    model = get_mods(model)
+    model = model[1:]
+    if file_path != "-1":
+        model.load_state_dict(torch.load(file_path))
+
+    if isinstance(criterion, nn.BCELoss):
+        neural_network = fast_altmin.VariantNeuralNetworkBCE()
+        fast_altmin.create_model_class(model, neural_network, batch_size, 0, lr_weights, lr_codes)
+        neural_network.construct_pairs()
+        return neural_network
+    elif isinstance(criterion, nn.MSELoss):
+        neural_network = fast_altmin.VariantNeuralNetworkMSE()
+        fast_altmin.create_model_class(model, neural_network, batch_size, 0, lr_weights, lr_codes)
+        neural_network.construct_pairs()
+        return neural_network
+    elif isinstance(criterion, nn.CrossEntropyLoss):
+        neural_network = fast_altmin.VariantNeuralNetworkCrossEntropy()
+        fast_altmin.create_model_class(model, neural_network, batch_size, 0, lr_weights, lr_codes)
+        neural_network.construct_pairs()
+        return neural_network
+    else:
+        print("Invalid criterion: Please choose either BCELoss, MSELoss or CrossEntropyLoss")
+
     
+
+
+def convert_cnn_pytorch_model(model, criterion, batch_size, C_in, height, width):
+    model = get_mods(model)
+    x = 0
+    for m in model:
+        if isinstance(m, nn.Linear):
+            break
+        x+=1
+
+    model_cnn = model[0:x]
+    model_nn = model[x:]
+
+    convolutional_neural_network = fast_altmin.VariantCNNCrossEntropy()
+    
+    C_out, H_out, W_out  = fast_altmin.create_CNN(model_cnn, convolutional_neural_network, batch_size, C_in, height, width)
+    neural_network = fast_altmin.VariantNeuralNetworkCrossEntropy()
+    fast_altmin.create_model_class(model_nn, neural_network, batch_size, 0)
+    neural_network.construct_pairs()
+    matrix_size = model_cnn[-1][1].kernel_size*2
+    lenet = fast_altmin.LeNetCrossEntropy(batch_size, C_out, matrix_size)
+    lenet.AddCNN(convolutional_neural_network)
+    lenet.AddFeedForwardNN(neural_network)
+    return lenet
